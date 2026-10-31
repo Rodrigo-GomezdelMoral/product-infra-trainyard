@@ -1,6 +1,6 @@
 numpy==2.4.4
 pandas==2.3.3
-pyarrow==19.0.1
+pyarrow==23.0.1
 agent-framework-core==1.23.0
 agent-framework-foundry==1.15.0
 azure-identity==1.27.0
