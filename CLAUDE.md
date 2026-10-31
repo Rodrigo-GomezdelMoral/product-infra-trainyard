@@ -79,6 +79,7 @@ Checked on 2026-10-30 against Microsoft Learn and PyPI. Each phase re-checks aga
 | Model | `lightgbm==4.7.0` (`LGBMClassifier`, `predict(..., pred_contrib=True)`), `scikit-learn==1.9.1` |
 | Scoring | `azureml-inference-server-http==1.5.1` (`azmlinfsrv`), `azureml-ai-monitoring==1.0.0` (`Collector("model_inputs")`, `Collector("model_outputs")`) |
 | API | FastAPI 0.162.0, `azure-identity`, `azure-cosmos`, `azure-storage-blob`, `azure-monitor-opentelemetry` |
+| Data | `numpy==2.4.4`, `pandas==2.3.3`, `pandas-stubs==2.3.3.260113` for mypy. MLflow 2.22.5 requires `pandas<3`, and numpy 2.5 raises deprecation warnings under pandas 2.3.3 (checked in phase 1), so Dependabot ignores pandas majors and numpy minors. The Azure ML environment pins the same two versions: `ml/features.py` must give identical rows in the app and in `prep` |
 | Load | `locust==2.47.0` |
 | Bicep | `Microsoft.MachineLearningServices/workspaces` and `workspaces/onlineEndpoints@2026-09-01`; `Microsoft.App/containerApps` and `authConfigs@2026-07-01`; `Microsoft.Insights/workbooks@2023-06-01`, `scheduledQueryRules@2023-12-01`, `metricAlerts@2018-03-01`; `Microsoft.Consumption/budgets@2026-06-01`; storage `@2026-06-01`, Key Vault `@2026-02-01`, managed identities `@2024-11-30`; Cosmos DB: the latest GA, checked in phase 7 |
 
