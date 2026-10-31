@@ -1,0 +1,30 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+name: train
+display_name: Train
+version: 1
+description: Fits the LightGBM classifier, calibrates it on validation and picks the operating point, the highest recall whose weekly flags fit the inspection budget at the precision target.
+inputs:
+  train:
+    type: uri_file
+  validation:
+    type: uri_file
+  seed:
+    type: integer
+    default: 42
+  budget:
+    type: integer
+    default: 6
+  min_precision:
+    type: number
+    default: 0.6
+outputs:
+  model:
+    type: mlflow_model
+code: ../..
+environment:
+  build:
+    path: ../environment
+command: >-
+  python -m ml.steps train --train ${{inputs.train}} --validation ${{inputs.validation}} --seed ${{inputs.seed}}
+  --budget ${{inputs.budget}} --min-precision ${{inputs.min_precision}} --model ${{outputs.model}}

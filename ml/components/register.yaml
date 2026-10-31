@@ -1,0 +1,30 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+name: register
+display_name: Register if the gate passed
+version: 1
+description: Registers the MLflow model only when evaluate passed it, tagged with its lineage (git commit, data asset and version, pipeline job, champion compared) and its holdout metrics.
+inputs:
+  model:
+    type: mlflow_model
+  report:
+    type: uri_file
+  model_name:
+    type: string
+    default: trainyard-risk
+  data_asset:
+    type: string
+  data_version:
+    type: string
+  git_sha:
+    type: string
+  pipeline_job:
+    type: string
+code: ../..
+environment:
+  build:
+    path: ../environment
+command: >-
+  python -m ml.steps register --model ${{inputs.model}} --report ${{inputs.report}}
+  --model-name ${{inputs.model_name}} --data-asset ${{inputs.data_asset}} --data-version ${{inputs.data_version}}
+  --git-sha ${{inputs.git_sha}} --pipeline-job ${{inputs.pipeline_job}}
