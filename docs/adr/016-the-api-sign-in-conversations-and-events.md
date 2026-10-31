@@ -73,6 +73,7 @@ This settles the build prompt's **NOT VERIFIED** custom-events API.
 
 ## Consequences
 
-- The web (phase 6) reads `/api/me` for the roles and renders the `approval`, `text`, `error` and `done` events. `done` carries the promotion card for a model owner.
+- The web (phase 6) reads `/api/me` for the roles and the display name, the `name` claim of the same header, which the app returns and never stores. It renders the `approval`, `text`, `error` and `done` events; `done` carries the promotion card for a model owner. An approval card answers in a new request, as Agent Framework expects (guide 5.1). While a canary card is open, the web reads `GET /api/promotion` every minute (ADR-009).
+- The same app serves the built web from `web/dist`, after the API routes, so one Container App behind Easy Auth serves both.
 - A request that changes the promotion never waits for the canary (ADR-009).
 - If Agent Framework adds session state to `CosmosHistoryProvider`, this store can be replaced; the documents would not migrate, but they expire within 30 days.

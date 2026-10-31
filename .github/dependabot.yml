@@ -20,6 +20,13 @@ updates:
     directory: /ml/environment
     schedule:
       interval: weekly
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    groups:
+      web:
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

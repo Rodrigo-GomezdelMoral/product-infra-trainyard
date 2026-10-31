@@ -21,6 +21,7 @@ from azure.identity.aio import DefaultAzureCredential
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app import telemetry
@@ -45,6 +46,7 @@ class Services:
 class User:
     id: str
     roles: frozenset[str]
+    name: str
 
 
 class Ask(BaseModel):
@@ -84,9 +86,10 @@ def user(x_ms_client_principal: Annotated[str | None, Header()] = None) -> User:
         raise HTTPException(401, "Sign in to use Trainyard.") from error
     roles = frozenset(val for typ, val in claims if typ in (principal.get("role_typ"), "roles")) & {READER, APPROVER}
     oid = next((val for typ, val in claims if typ in (OID, "oid")), "")
+    name = next((val for typ, val in claims if typ == "name"), "")
     if not roles or not oid:
         raise HTTPException(403, "Ask your administrator for the Reader or the ModelApprover role.")
-    return User(hashlib.sha256(oid.encode()).hexdigest()[:16], roles)
+    return User(hashlib.sha256(oid.encode()).hexdigest()[:16], roles, name)
 
 
 def approver(who: Annotated[User, Depends(user)]) -> User:
@@ -127,8 +130,8 @@ async def healthz(request: Request) -> JSONResponse:
 
 
 @router.get("/api/me")
-async def me(who: Signed) -> dict[str, list[str]]:
-    return {"roles": sorted(who.roles)}
+async def me(who: Signed) -> dict[str, Any]:
+    return {"name": who.name, "roles": sorted(who.roles)}
 
 
 @router.get("/api/fleet/risk")
@@ -232,4 +235,5 @@ def create(open_services: Callable[[], AbstractAsyncContextManager[Services]], t
     api.include_router(router)
     for kind in (AzureError, ChatClientException):
         api.add_exception_handler(kind, unavailable)
+    api.mount("/", StaticFiles(directory="web/dist", html=True, check_dir=False), name="web")
     return api
