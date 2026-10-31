@@ -5,7 +5,7 @@ from pandas.testing import assert_frame_equal
 
 from app.domain.simulator import Feed, simulate
 from ml.features import ANALOGUE, DIGITAL
-from tests.conftest import START
+from tests.doubles import START
 
 
 def test_simulation_is_reproducible_and_advances_day_by_day() -> None:
