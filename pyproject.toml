@@ -11,9 +11,18 @@ strict = true
 explicit_package_bases = true
 namespace_packages = true
 files = ["."]
-exclude = ["^\\.venv/", "^web/"]
+exclude = ["^\\.venv/", "^web/", "^\\.local/"]
+
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "azureml.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    "ignore::marshmallow.warnings.Marshmallow4Warning",
+    "ignore::DeprecationWarning:mlflow",
+    "ignore:.*Any type hint is inferred as AnyType:UserWarning",
+]

@@ -1,0 +1,30 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+name: prep
+display_name: Prepare
+version: 1
+description: One feature row per unit and day from the fleet feed, with ml/features.py, split by time into train, validation and holdout with a 7-day gap between them.
+inputs:
+  feed:
+    type: uri_folder
+  validation_days:
+    type: integer
+    default: 56
+  holdout_days:
+    type: integer
+    default: 56
+outputs:
+  train:
+    type: uri_file
+  validation:
+    type: uri_file
+  holdout:
+    type: uri_file
+code: ../..
+environment:
+  build:
+    path: ../environment
+command: >-
+  python -m ml.steps prep --feed ${{inputs.feed}} --validation-days ${{inputs.validation_days}}
+  --holdout-days ${{inputs.holdout_days}} --train ${{outputs.train}} --validation ${{outputs.validation}}
+  --holdout ${{outputs.holdout}}

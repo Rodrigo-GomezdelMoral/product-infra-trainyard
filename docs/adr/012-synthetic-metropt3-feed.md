@@ -31,5 +31,5 @@ Trainyard needs fleet telemetry with labelled failures to train, compare, monito
 
 - Every failure has a warning, so measured recall and precision are better than a real fleet would allow. `data/README.md` says so now; the model card and `RESPONSIBLE_AI.md` (phase 4) and the README (phase 9) must say it too.
 - The feed's realism is plausibility, not calibration: levels are not fitted to MetroPT-3's recordings.
-- A year of telemetry is about 2.1 million rows and 254 MB in memory, and building its training rows took 15 seconds on a laptop. `prep` should fit on one `Standard_F2s_v2` node (4 GiB); phase 3 measures it.
+- A year of telemetry is about 2.1 million rows and 254 MB in memory, and building its training rows took 15 seconds on a laptop. `prep` fits on one `Standard_F2s_v2` node (4 GiB). Measured in phase 3, in the Azure Machine Learning environment under a hard 4 GiB limit: a year of feed peaked at 952 MiB and took 14 s.
 - MetroPT-3 is cited as the schema reference under CC BY 4.0; none of its data is copied.

@@ -1,0 +1,42 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+name: evaluate
+display_name: Evaluate and gate
+version: 1
+description: Scores the challenger and the champion on the same holdout, the latest window whose labels have matured, and writes the gate decision that register obeys.
+inputs:
+  model:
+    type: mlflow_model
+  holdout:
+    type: uri_file
+  champion:
+    type: mlflow_model
+    optional: true
+  champion_version:
+    type: string
+    optional: true
+  min_recall:
+    type: number
+    default: 0.8
+  min_precision:
+    type: number
+    default: 0.6
+  min_series_recall:
+    type: number
+    default: 0.7
+  max_recall_loss:
+    type: number
+    default: 0.02
+outputs:
+  report:
+    type: uri_file
+code: ../..
+environment:
+  build:
+    path: ../environment
+command: >-
+  python -m ml.steps evaluate --model ${{inputs.model}} --holdout ${{inputs.holdout}}
+  $[[--champion ${{inputs.champion}} --champion-version ${{inputs.champion_version}}]]
+  --min-recall ${{inputs.min_recall}} --min-precision ${{inputs.min_precision}}
+  --min-series-recall ${{inputs.min_series_recall}} --max-recall-loss ${{inputs.max_recall_loss}}
+  --report ${{outputs.report}}

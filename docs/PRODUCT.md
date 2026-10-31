@@ -80,7 +80,7 @@ Human time per model cycle falls from 22–44 hours to **about 15 minutes**, spe
 
 - **Label:** a unit is positive when its APU fails within the next 7 days.
 - **Inspection budget:** the workshop can inspect **6 units a week**; this is the default and a configuration value.
-- **Operating point:** the decision threshold is chosen on the validation window as the highest recall whose weekly flags fit the inspection budget. Splits are by time, never random.
+- **Operating point:** the decision threshold is chosen on the validation window as the highest recall whose weekly flags fit the inspection budget, at KPI-3's precision target. In every validation week, the distinct units flagged stay within the budget, and at least 60 % of flags are followed by a failure within 7 days. Probabilities are calibrated on the same window. Splits are by time, never random, with a 7-day gap between them (ADR-003).
 
 ## Requirements
 
