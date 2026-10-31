@@ -3,3 +3,9 @@ ruff==0.17.3
 mypy==2.4.1
 pytest==9.2.0
 pandas-stubs==2.3.3.260113
+types-PyYAML==6.0.12.20260906
+pyarrow==19.0.1
+scikit-learn==1.9.1
+lightgbm==4.7.0
+mlflow==2.22.5
+azureml-ai-monitoring==1.0.0
