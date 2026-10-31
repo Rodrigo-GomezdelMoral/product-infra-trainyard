@@ -69,7 +69,8 @@ This settles the build prompt's **NOT VERIFIED** custom-events API.
 
 - **Implemented and tested** (`tests/test_api.py`): sign-in and roles, the conversation round trip and its deletion, the feedback event, an owner's promotion through the chat, and a down or throttled model, endpoint and store.
 - **Run locally** against the emulator and the real model, as above.
-- **Pending:** `connect()`, the Azure wiring with `DefaultAzureCredential`, first runs in staging in phase 8, together with Easy Auth.
+- **Declared in Bicep** (phase 7, validated with `what-if`): Easy Auth on the Container App with `RedirectToLoginPage`, the token store off and only `/healthz` excluded; the `conversations` container with partition key `/owner`, a 30-day default TTL and an index on `_ts` only.
+- **Pending:** `connect()`, the Azure wiring with `DefaultAzureCredential`, first runs in staging in phase 8, together with Easy Auth's sign-in.
 
 ## Consequences
 

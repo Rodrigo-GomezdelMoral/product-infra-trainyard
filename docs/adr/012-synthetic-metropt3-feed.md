@@ -25,7 +25,8 @@ Trainyard needs fleet telemetry with labelled failures to train, compare, monito
 ## State
 
 - Implemented and tested in phase 1: the simulator, the feature and label functions, the reproducibility, parity and degradation tests.
-- Pending: the workflow inputs (phase 7) and the first feed as a data asset in staging (phase 8).
+- Implemented in phase 7: the `feed_days` and `firmware_b_from` inputs of `deploy.yml` and `release.yml`, which register a new `fleet-feed` version through `.github/actions/ship`.
+- Pending: the first feed as a data asset in staging (phase 8).
 
 ## Consequences
 

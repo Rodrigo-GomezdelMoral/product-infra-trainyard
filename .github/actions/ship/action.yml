@@ -1,0 +1,82 @@
+name: ship
+description: >-
+  Deploy one image digest and the infrastructure to an environment, keep the endpoint's traffic as it is, smoke-test
+  the app, register the ML components with the image's version, and run a fleet feed operation if one is asked for.
+  The calling job sets ENVIRONMENT, RG, IMAGE_DIGEST, IMAGE_VERSION, AUTH_CLIENT_ID, ALERT_EMAIL_ADDRESS and the
+  shared-base names, and is signed in to Azure.
+
+inputs:
+  feed-days:
+    description: Days of synthetic feed from 2025-11-01 to register as a new fleet-feed version (ADR-012); empty for none
+    required: false
+    default: ""
+  firmware-b-from:
+    description: Date from which the firmware-b scenario shifts Series B; empty for none
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Read the endpoint's live and mirrored traffic, so that the deployment never moves them
+      shell: bash
+      run: |
+        outputs="$(az deployment group show -g "$RG" -n trainyard --query properties.outputs -o json 2>/dev/null || echo '{}')"
+        workspace="$(jq -r '.workspace.value // ""' <<<"$outputs")"
+        endpoint="$(jq -r '.endpoint.value // ""' <<<"$outputs")"
+        live='{}'
+        if [ -n "$endpoint" ]; then
+          live="$(az resource show -g "$RG" -n "$workspace/onlineEndpoints/$endpoint" -o json \
+            --resource-type Microsoft.MachineLearningServices/workspaces/onlineEndpoints --query properties)"
+        fi
+        echo "ENDPOINT_TRAFFIC=$(jq -c '.traffic // {}' <<<"$live")" >> "$GITHUB_ENV"
+        echo "ENDPOINT_MIRROR_TRAFFIC=$(jq -c '.mirrorTraffic // {}' <<<"$live")" >> "$GITHUB_ENV"
+
+    - name: What-if, then deploy
+      shell: bash
+      run: |
+        az deployment group what-if -g "$RG" -n trainyard -p infra/main.bicepparam --result-format ResourceIdOnly --only-show-errors
+        az deployment group create -g "$RG" -n trainyard -p infra/main.bicepparam --only-show-errors \
+          --query properties.outputs -o json > "$RUNNER_TEMP/outputs.json"
+        identity="$(jq -r .amlIdentityClientId.value "$RUNNER_TEMP/outputs.json")"
+        echo "::add-mask::$identity"
+        echo "APP=$(jq -r .app.value "$RUNNER_TEMP/outputs.json")" >> "$GITHUB_ENV"
+        echo "WORKSPACE=$(jq -r .workspace.value "$RUNNER_TEMP/outputs.json")" >> "$GITHUB_ENV"
+
+    - name: Smoke test, through Easy Auth's excluded health path
+      shell: bash
+      run: |
+        fqdn="$(az containerapp show -n "$APP" -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
+        echo "::add-mask::$fqdn"
+        echo "::add-mask::${fqdn#*.}"
+        curl -fsS -o /dev/null -w "/healthz %{http_code} %{time_total} s\n" --retry 12 --retry-delay 10 --retry-all-errors "https://$fqdn/healthz"
+
+    - name: Register the ML components with the image's version
+      shell: bash
+      run: |
+        az extension add --name ml --version 2.45.2 --yes --only-show-errors
+        for spec in ml/components/*.yaml; do
+          name="$(basename "$spec" .yaml)"
+          az ml component show -n "$name" -v "$IMAGE_VERSION" -g "$RG" -w "$WORKSPACE" -o none --only-show-errors 2>/dev/null ||
+            az ml component create -f "$spec" --set version="$IMAGE_VERSION" -g "$RG" -w "$WORKSPACE" -o none --only-show-errors
+          echo "$name $IMAGE_VERSION registered"
+        done
+
+    - if: inputs.feed-days != ''
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      with:
+        python-version: "3.12"
+
+    - name: Fleet feed operation (ADR-012)
+      if: inputs.feed-days != ''
+      shell: bash
+      env:
+        FEED_DAYS: ${{ inputs.feed-days }}
+        FIRMWARE_B_FROM: ${{ inputs.firmware-b-from }}
+      run: |
+        pip install --quiet $(grep -h -E '^(numpy|pandas|pyarrow)==' requirements.txt requirements-dev.txt)
+        python -m ops.feed --out "$RUNNER_TEMP/feed" --start 2025-11-01 --days "$FEED_DAYS" ${FIRMWARE_B_FROM:+--firmware-b-from "$FIRMWARE_B_FROM"}
+        version="$(date -u +%Y%m%d%H%M%S)"
+        az ml data create -n fleet-feed -v "$version" --type uri_folder --path "$RUNNER_TEMP/feed" -g "$RG" -w "$WORKSPACE" -o none --only-show-errors \
+          --description "Synthetic feed from 2025-11-01, $FEED_DAYS days, firmware-b from ${FIRMWARE_B_FROM:-never}, run $GITHUB_RUN_ID"
+        echo "fleet-feed $version registered: $FEED_DAYS days, firmware-b from ${FIRMWARE_B_FROM:-never}"

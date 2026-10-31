@@ -46,7 +46,7 @@ Azure Machine Learning managed online endpoints already give blue and green depl
   - A challenger without the champion's metrics on the same holdout counts as not compared.
   - A shadow with no mirrored request is never ready, however long it has run.
 - **Storage:** `CosmosCheckpointStorage(container_client=...)`.
-  - **The Bicep creates the container,** with partition key `/workflow_name`. Its indexing policy must keep `/workflow_name`, `/timestamp` and `/checkpoint_id`, because the storage queries `ORDER BY c.timestamp`.
+  - **The Bicep creates the container,** with partition key `/workflow_name`. Its indexing policy must keep `/workflow_name`, `/timestamp` and `/checkpoint_id`, because the storage queries `ORDER BY c.timestamp`. `infra/modules/app.bicep` indexes exactly those three paths and excludes the rest (phase 7).
   - **No auto-creation.** In the installed 1.0.0b261015, a container client skips `create_database_if_not_exists` and `create_container_if_not_exists`, which Entra-only data-plane access forbids.
   - **Registered payload types.** `Plan` and `Card` are registered with `register_checkpoint_type`, as the restricted unpickler requires.
 

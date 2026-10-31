@@ -1,0 +1,57 @@
+[
+  {
+    "title": "SLA: inference availability, % (SLA 99.5, SLO 99.7, REQ-07)",
+    "days": 30,
+    "query": "AmlOnlineEndpointTrafficLog | summarize requests = count(), failed = countif(toint(ResponseCode) >= 500 or toint(ResponseCode) in (408, 429)) | extend availability_pct = round(100.0 * (requests - failed) / requests, 3), sla = 99.5, slo = 99.7"
+  },
+  {
+    "title": "SLA: inference p95 latency per day, ms (SLA 500, SLO 400, REQ-08)",
+    "days": 30,
+    "query": "AmlOnlineEndpointTrafficLog | summarize requests = count(), p95_ms = percentile(TotalDurationMs, 95) by day = bin(TimeGenerated, 1d) | extend sla = 500, slo = 400 | order by day desc"
+  },
+  {
+    "title": "SLO: chat errors and p95 duration (errors under 1 %)",
+    "days": 30,
+    "query": "AppRequests | where Name has \"/api/chat\" | summarize requests = count(), error_pct = round(100.0 * countif(toint(ResultCode) >= 500) / count(), 2), p95_ms = percentile(DurationMs, 95) | extend slo_error_pct = 1"
+  },
+  {
+    "title": "KPI-1 model cycle time, minutes (target 120)",
+    "days": 90,
+    "query": "AppEvents | where Name == \"retrain_completed\" | summarize cycles = count(), median_minutes = percentile(todouble(Properties.duration_minutes), 50), worst_minutes = max(todouble(Properties.duration_minutes)) | extend target = 120"
+  },
+  {
+    "title": "KPI-2 drift-to-production lead time, hours (target 24)",
+    "days": 90,
+    "query": "AppEvents | where Name == \"model_promoted\" and isnotempty(Properties.drift_to_promotion_hours) | summarize promotions = count(), worst_hours = max(todouble(Properties.drift_to_promotion_hours)) | extend target = 24"
+  },
+  {
+    "title": "KPI-3 predictive quality at 7 days on the latest matured window (recall 0.80 at precision 0.60)",
+    "days": 90,
+    "query": "AppEvents | where Name == \"model_evaluated\" | top 1 by TimeGenerated | project TimeGenerated, pipeline_job = tostring(Properties.pipeline_job), recall_7d = todouble(Properties.recall_7d), precision_7d = todouble(Properties.precision_7d), recall_target = 0.8, precision_target = 0.6"
+  },
+  {
+    "title": "KPI-4 promotion failure rate, 90 days, % (target 15)",
+    "days": 90,
+    "query": "AppEvents | where Name in (\"model_promoted\", \"model_rolled_back\") | summarize promotions = countif(Name == \"model_promoted\"), rollbacks = countif(Name == \"model_rolled_back\") | extend failure_pct = round(100.0 * rollbacks / promotions, 1), target = 15"
+  },
+  {
+    "title": "KPI-5 planner satisfaction, 30 days, % helpful (target 80, REQ-09)",
+    "days": 30,
+    "query": "AppEvents | where Name == \"feedback_given\" | summarize votes = count(), helpful_pct = round(100.0 * countif(tobool(Properties.helpful)) / count(), 1) | extend target = 80"
+  },
+  {
+    "title": "Health model, last 24 hours: inference, chat, pipeline, drift",
+    "days": 1,
+    "query": "union (AmlOnlineEndpointTrafficLog | summarize n = count(), bad = countif(toint(ResponseCode) >= 500 or toint(ResponseCode) in (408, 429)), p95 = percentile(TotalDurationMs, 95) | extend component = \"inference\", state = case(n == 0, \"no traffic\", bad > 0.005 * n, \"down\", bad > 0.003 * n or p95 >= 400, \"degraded\", \"healthy\")), (AppRequests | where Name has \"/api/chat\" | summarize n = count(), bad = countif(toint(ResultCode) >= 500) | extend component = \"chat\", state = case(n == 0, \"no traffic\", bad > 0.05 * n, \"down\", bad > 0.01 * n, \"degraded\", \"healthy\")), (AmlRunStatusChangedEvent | where Status in (\"Completed\", \"Failed\") and ExperimentName == \"trainyard-training\" | summarize n = count(), bad = countif(Status == \"Failed\") | extend component = \"pipeline\", state = case(n == 0, \"no runs\", bad == n, \"down\", bad > 0, \"degraded\", \"healthy\")), (AmlRunStatusChangedEvent | where Status in (\"Completed\", \"Failed\") and ExperimentName != \"trainyard-training\" | summarize n = count(), bad = countif(Status == \"Failed\") | extend component = \"drift\", state = case(n == 0, \"no runs\", bad > 0, \"breached\", \"healthy\")) | project component, state, n, bad"
+  },
+  {
+    "title": "Monitor and pipeline runs (REQ-04)",
+    "days": 30,
+    "query": "AmlRunStatusChangedEvent | where Status in (\"Completed\", \"Failed\", \"Canceled\") | project TimeGenerated, ExperimentName, RunId, Status | order by TimeGenerated desc | take 50"
+  },
+  {
+    "title": "Unit cost, USD: estimates from docs/cost.md; Cost Management holds the actuals",
+    "days": 30,
+    "query": "AppRequests | where Name has \"/api/chat\" | summarize chat_questions = count() | extend usd_per_question = 0.002, usd_per_train_month = 1.5, usd_per_retraining_compute = 0.05, usd_per_blue_green_day = 1.6"
+  }
+]

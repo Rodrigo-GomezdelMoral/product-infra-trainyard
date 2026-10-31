@@ -1,0 +1,92 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      digest:
+        description: Digest (sha256:...) of an earlier image to put back on staging (image rollback); empty deploys this commit's image
+        required: false
+        default: ""
+      feed_days:
+        description: Fleet feed operation, ADR-012 - days of synthetic feed from 2025-11-01 to register; empty for none
+        required: false
+        default: ""
+      firmware_b_from:
+        description: Date (YYYY-MM-DD) from which the firmware-b scenario shifts Series B; empty for none
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    if: vars.DEPLOY_STAGING == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+      statuses: write
+    env:
+      ENVIRONMENT: staging
+      RG: rg-trainyard-stg-swc
+      IMAGE: product-infra-trainyard
+      REQUESTED_DIGEST: ${{ inputs.digest }}
+      AUTH_CLIENT_ID: ${{ vars.AUTH_CLIENT_ID }}
+      ALERT_EMAIL_ADDRESS: ${{ secrets.ALERT_EMAIL_ADDRESS }}
+      SHARED_RESOURCE_GROUP: ${{ vars.SHARED_RESOURCE_GROUP }}
+      REGISTRY_NAME: ${{ vars.REGISTRY_NAME }}
+      LOG_ANALYTICS_WORKSPACE_NAME: ${{ vars.LOG_ANALYTICS_WORKSPACE_NAME }}
+      ACTION_GROUP_NAME: ${{ vars.ACTION_GROUP_NAME }}
+      FOUNDRY_ACCOUNT_NAME: ${{ vars.FOUNDRY_ACCOUNT_NAME }}
+      FOUNDRY_PROJECT_NAME: ${{ vars.FOUNDRY_PROJECT_NAME }}
+      CHAT_MODEL_DEPLOYMENT: ${{ vars.CHAT_MODEL_DEPLOYMENT }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: One image per commit, tagged with the date, the branch and the commit, never rebuilt
+        run: |
+          if [ -n "$REQUESTED_DIGEST" ]; then
+            tag="$(az acr repository show -n "$REGISTRY_NAME" --image "$IMAGE@$REQUESTED_DIGEST" --query "tags[0]" -o tsv)"
+          else
+            tag="$(az acr repository show-tags -n "$REGISTRY_NAME" --repository "$IMAGE" -o tsv \
+              --query "[?ends_with(@, '-main-${GITHUB_SHA::7}')] | [0]" 2>/dev/null || true)"
+          fi
+          if [ -z "$tag" ]; then
+            tag="$(date -u +%Y%m%d)-main-${GITHUB_SHA::7}"
+            server="$(az acr show -n "$REGISTRY_NAME" --query loginServer -o tsv)"
+            az acr login -n "$REGISTRY_NAME" --only-show-errors
+            docker build --quiet -t "$server/$IMAGE:$tag" .
+            docker push --quiet "$server/$IMAGE:$tag"
+          fi
+          echo "IMAGE_VERSION=$tag" >> "$GITHUB_ENV"
+          echo "IMAGE_DIGEST=$(az acr repository show -n "$REGISTRY_NAME" --image "$IMAGE:$tag" --query digest -o tsv)" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/ship
+        with:
+          feed-days: ${{ inputs.feed_days }}
+          firmware-b-from: ${{ inputs.firmware_b_from }}
+
+      - name: Record the digest staging runs for this commit, which the release promotes
+        if: inputs.digest == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" --silent \
+            -f state=success -f context=staging-image -f description="$IMAGE_DIGEST"
