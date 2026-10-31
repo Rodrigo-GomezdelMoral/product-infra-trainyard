@@ -1,0 +1,92 @@
+name: release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      feed_days:
+        description: Fleet feed operation, ADR-012 - days of synthetic feed from 2025-11-01 to register; empty for none
+        required: false
+        default: ""
+      firmware_b_from:
+        description: Date (YYYY-MM-DD) from which the firmware-b scenario shifts Series B; empty for none
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: read
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+      digest: ${{ steps.check.outputs.digest }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - id: check
+        name: Staging runs this commit's image and the load tests met the SLAs (REQ-07, REQ-08)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: |
+          [[ "$TAG" == v* ]] || { echo "Run the release workflow on a v* tag"; exit 1; }
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          statuses="$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/status" --jq .statuses)"
+          digest="$(jq -r '[.[] | select(.context == "staging-image")][0].description // ""' <<<"$statuses")"
+          echo "$TAG: staging image ${digest:-missing}"
+          for scenario in normal peak endurance; do
+            state="$(jq -r --arg c "load-test/$scenario" '[.[] | select(.context == $c)][0].state // "missing"' <<<"$statuses")"
+            echo "load-test/$scenario: $state"
+            [ "$state" = success ] || missing=1
+          done
+          [ -n "$digest" ] && [ -z "${missing:-}" ]
+          { echo "sha=$sha"; echo "digest=$digest"; echo "tag=$TAG"; } >> "$GITHUB_OUTPUT"
+
+  production:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ENVIRONMENT: production
+      RG: rg-trainyard-prod-swc
+      IMAGE_DIGEST: ${{ needs.verify.outputs.digest }}
+      IMAGE_VERSION: ${{ needs.verify.outputs.tag }}
+      AUTH_CLIENT_ID: ${{ vars.AUTH_CLIENT_ID }}
+      ALERT_EMAIL_ADDRESS: ${{ secrets.ALERT_EMAIL_ADDRESS }}
+      SHARED_RESOURCE_GROUP: ${{ vars.SHARED_RESOURCE_GROUP }}
+      REGISTRY_NAME: ${{ vars.REGISTRY_NAME }}
+      LOG_ANALYTICS_WORKSPACE_NAME: ${{ vars.LOG_ANALYTICS_WORKSPACE_NAME }}
+      ACTION_GROUP_NAME: ${{ vars.ACTION_GROUP_NAME }}
+      FOUNDRY_ACCOUNT_NAME: ${{ vars.FOUNDRY_ACCOUNT_NAME }}
+      FOUNDRY_PROJECT_NAME: ${{ vars.FOUNDRY_PROJECT_NAME }}
+      CHAT_MODEL_DEPLOYMENT: ${{ vars.CHAT_MODEL_DEPLOYMENT }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
+
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: ./.github/actions/ship
+        with:
+          feed-days: ${{ inputs.feed_days }}
+          firmware-b-from: ${{ inputs.firmware_b_from }}

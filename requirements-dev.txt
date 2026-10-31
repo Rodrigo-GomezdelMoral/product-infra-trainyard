@@ -10,3 +10,4 @@ lightgbm==4.7.0
 mlflow==2.22.5
 azureml-ai-monitoring==1.0.0
 httpx==0.28.1
+locust==2.47.0

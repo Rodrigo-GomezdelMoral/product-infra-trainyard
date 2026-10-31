@@ -8,3 +8,4 @@ agent-framework-azure-cosmos==1.0.0b261015
 azure-cosmos==4.17.1
 azure-monitor-opentelemetry==1.8.11
 fastapi==0.162.0
+uvicorn==0.54.0

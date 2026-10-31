@@ -1,0 +1,68 @@
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      runs: ${{ steps.runs.outputs.count }}
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: runs
+        name: Publish only once there are runs recorded from the deployed system (phase 9)
+        run: echo "count=$(find src/demo/runs -name '*.json' 2>/dev/null | wc -l)" >> "$GITHUB_OUTPUT"
+
+      - if: steps.runs.outputs.count != '0'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - if: steps.runs.outputs.count != '0'
+        run: npm ci
+
+      - name: Build the demo that replays the recorded runs, under the Pages base path
+        if: steps.runs.outputs.count != '0'
+        env:
+          VITE_DEMO_MODE: "true"
+        run: npx vite build --base=/product-infra-trainyard/
+
+      - if: steps.runs.outputs.count != '0'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.runs != '0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

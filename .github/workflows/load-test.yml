@@ -1,0 +1,106 @@
+name: load-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: normal (5 users, 5 min), peak (50, 2 min), stress (ramp to the break), endurance (10, 30 min), chat (2, 2 min)
+        type: choice
+        options: [normal, peak, stress, endurance, chat]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: load-test
+  cancel-in-progress: false
+
+jobs:
+  locust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+      statuses: write
+    env:
+      RG: rg-trainyard-stg-swc
+      SCENARIO: ${{ inputs.scenario }}
+      AUTH_CLIENT_ID: ${{ vars.AUTH_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Locust and the packages that build the 40-row request
+        run: pip install --quiet $(grep -h -E '^(numpy|pandas|locust)==' requirements.txt requirements-dev.txt)
+
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Targets and Entra ID tokens, masked
+        run: |
+          outputs="$(az deployment group show -g "$RG" -n trainyard --query properties.outputs -o json)"
+          workspace="$(jq -r .workspace.value <<<"$outputs")"
+          endpoint="$(jq -r .endpoint.value <<<"$outputs")"
+          app="$(jq -r .app.value <<<"$outputs")"
+          scoring="$(az resource show -g "$RG" -n "$workspace/onlineEndpoints/$endpoint" -o tsv \
+            --resource-type Microsoft.MachineLearningServices/workspaces/onlineEndpoints --query properties.scoringUri)"
+          fqdn="$(az containerapp show -n "$app" -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
+          endpoint_token="$(az account get-access-token --resource https://ml.azure.com --query accessToken -o tsv)"
+          app_token="$(az account get-access-token --resource "api://$AUTH_CLIENT_ID" --query accessToken -o tsv)"
+          for secret in "$scoring" "$fqdn" "${fqdn#*.}" "$endpoint_token" "$app_token"; do echo "::add-mask::$secret"; done
+          { echo "SCORING_URL=$scoring"; echo "APP_URL=https://$fqdn"; echo "ENDPOINT_TOKEN=$endpoint_token"; echo "APP_TOKEN=$app_token"; } >> "$GITHUB_ENV"
+          echo "ENDPOINT_ID=$(az resource show -g "$RG" -n "$workspace/onlineEndpoints/$endpoint" --resource-type Microsoft.MachineLearningServices/workspaces/onlineEndpoints --query id -o tsv)" >> "$GITHUB_ENV"
+          echo "APP_ID=$(az containerapp show -n "$app" -g "$RG" --query id -o tsv)" >> "$GITHUB_ENV"
+          echo "STARTED=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      - name: Run the scenario; Locust exits non-zero when the endpoint misses the SLA
+        run: |
+          case "$SCENARIO" in
+            normal) users=(-u 5 -r 1 -t 5m EndpointUser FleetUser) ;;
+            peak) users=(-u 50 -r 10 -t 2m EndpointUser FleetUser) ;;
+            stress) users=(-u 300 -r 1 -t 20m EndpointUser FleetUser) ;;
+            endurance) users=(-u 10 -r 1 -t 30m EndpointUser FleetUser) ;;
+            chat) users=(-u 2 -r 1 -t 2m ChatUser) ;;
+          esac
+          locust -f load/locustfile.py --headless --only-summary --csv "load-$SCENARIO" --html "load-$SCENARIO.html" "${users[@]}"
+
+      - name: Capacity from Azure Monitor - endpoint CPU, memory and capacity, app replicas
+        if: always() && env.STARTED != ''
+        run: |
+          slot="$(az resource show --ids "$ENDPOINT_ID" --query "keys(properties.traffic)[0]" -o tsv)"
+          peak() { az monitor metrics list --resource "$1" --metric "$2" --aggregation Maximum --start-time "$STARTED" --interval PT1M \
+            --query "max(value[].timeseries[].data[].maximum)" -o tsv; }
+          for metric in CpuUtilizationPercentage CpuMemoryUtilizationPercentage DeploymentCapacity; do
+            echo "Endpoint $metric max: $(peak "$ENDPOINT_ID/deployments/$slot" "$metric")"
+          done | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "App replicas max: $(peak "$APP_ID" Replicas)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Results in the job summary
+        if: always()
+        run: |
+          { echo "### $SCENARIO, $(date -u +%Y-%m-%d)"; echo '```'; column -s, -t < "load-${SCENARIO}_stats.csv"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: load-${{ inputs.scenario }}
+          path: load-${{ inputs.scenario }}*
+
+      - name: Record the result on the commit, which the release checks
+        if: always() && inputs.scenario != 'chat' && inputs.scenario != 'stress'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATE: ${{ job.status == 'success' && 'success' || 'failure' }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" --silent \
+            -f state="$STATE" -f context="load-test/$SCENARIO" -f description="Locust $SCENARIO against staging, $(date -u +%Y-%m-%d)"

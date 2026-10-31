@@ -18,6 +18,11 @@ untyped_calls_exclude = ["azure.cosmos.exceptions", "opentelemetry.sdk._logs"]
 module = ["sklearn.*", "azureml.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["load.locustfile"]
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

@@ -1,0 +1,10 @@
+*
+!requirements.txt
+!app/
+!ml/*.py
+!web/
+web/node_modules/
+web/dist/
+web/e2e/
+web/src/demo/runs/e2e.json
+**/__pycache__/
