@@ -31,7 +31,7 @@ A language model in this loop brings two risks. It can invent or recompute a num
 
 ## State
 
-**Implemented and tested.** CI runs the agent tests with a scripted model. The same tests run against the real `gpt-5-mini` of the shared base when `FOUNDRY_PROJECT_ENDPOINT` is set: 5 of 5 passed on 2026-10-31.
+**Implemented and tested.** CI runs the agent tests with a scripted model. In phase 2 the same tests could run against the real `gpt-5-mini` of the shared base when `FOUNDRY_PROJECT_ENDPOINT` was set, and 5 of 5 passed on 2026-10-31. Since phase 4, the live path is the agent evaluation (`eval/`, `docs/evaluation.md`): 43 cases with thresholds, run by `eval.yml` on every pull request that can change the agent. Its `facts` check adds the per-unit check promised below.
 
 **Live runs, 2026-10-31.** Five scenarios, three rounds each, 15 runs in all, with the endpoint and Azure Machine Learning replaced by doubles:
 
