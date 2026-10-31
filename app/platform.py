@@ -23,6 +23,16 @@ class Scores:
 
 
 @dataclass(frozen=True)
+class Run:
+    job: str
+    ended: str
+    minutes: float
+    version: str
+    recall_7d: float
+    precision_7d: float
+
+
+@dataclass(frozen=True)
 class Health:
     requests: int
     failed: int
@@ -68,3 +78,5 @@ class Platform(Protocol):
     async def retrain(self) -> dict[str, str]: ...
 
     async def monitor(self) -> dict[str, str]: ...
+
+    async def runs(self, after: str) -> list[Run]: ...
