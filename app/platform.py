@@ -8,6 +8,10 @@ import pandas as pd
 SLO_P95_MS, SLO_FAILED = 400.0, 0.003
 
 
+class NotReadyError(Exception):
+    """Azure is still applying a change; the promotion timer runs the step again a minute later (ADR-009)."""
+
+
 @dataclass(frozen=True)
 class Model:
     version: str

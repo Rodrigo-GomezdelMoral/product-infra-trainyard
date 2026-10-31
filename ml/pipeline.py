@@ -1,19 +1,35 @@
-"""REQ-01, REQ-02: the training pipeline in Azure Machine Learning, four components on serverless compute.
+"""REQ-01 to REQ-04: the training pipeline in Azure Machine Learning, its online deployment and its monitor.
 
 Every node runs as the workspace's user-assigned identity, `id-trainyard-aml-<env>`: serverless compute has no
 system-assigned identity and cannot pull from the admin-disabled shared registry as the submitter (ADR-006). The job
 gets its name before submission, so `register` can tag the model with the job that produced it (REQ-01).
 """
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from azure.ai.ml import Input, load_component
+from azure.ai.ml import Input, MLClient, load_component
 from azure.ai.ml.dsl import pipeline
-from azure.ai.ml.entities import JobResourceConfiguration, ManagedIdentityConfiguration, PipelineJob
+from azure.ai.ml.entities import (
+    CodeConfiguration,
+    DataCollector,
+    DeploymentCollection,
+    JobResourceConfiguration,
+    ManagedIdentityConfiguration,
+    ManagedOnlineDeployment,
+    MonitorDefinition,
+    MonitoringTarget,
+    MonitorSchedule,
+    PipelineJob,
+    RecurrencePattern,
+    RecurrenceTrigger,
+    ServerlessSparkCompute,
+)
 
 COMPONENTS, STEPS = Path(__file__).parent / "components", ("prep", "train", "evaluate", "register")
 INSTANCE, EXPERIMENT = "Standard_F2s_v2", "trainyard-training"
+FEED, MODEL, MONITOR, SERVING = "fleet-feed", "trainyard-risk", "trainyard-monitor", "Standard_DS1_v2"
 
 
 def components() -> dict[str, Any]:
@@ -44,3 +60,53 @@ def build(
         node.resources = JobResourceConfiguration(instance_type=INSTANCE, instance_count=1)
         node.identity = ManagedIdentityConfiguration(client_id=identity)
     return job
+
+
+def submit(client: MLClient, endpoint: str, version: str, identity: str) -> dict[str, str]:
+    """REQ-02: the components registered with image `version`, on the latest feed, against the model serving 100 %."""
+    feed = client.data.get(FEED, label="latest")
+    slot = next(
+        (name for name, share in (client.online_endpoints.get(endpoint).traffic or {}).items() if share == 100), None
+    )
+    champion = str(client.online_deployments.get(slot, endpoint).model).rsplit("/", 1)[-1] if slot else None
+    steps = {step: client.components.get(step, version=version) for step in STEPS}
+    name, reference = f"training-{datetime.now(UTC):%Y%m%d%H%M%S}", f"azureml:{FEED}:{feed.version}"
+    job = build(
+        steps, reference, name, identity, version.rsplit("-", 1)[-1], champion and f"azureml:{MODEL}:{champion}"
+    )
+    created = client.jobs.create_or_update(job)
+    return {
+        "pipeline_job": str(created.name),
+        "data_asset": FEED,
+        "data_version": str(feed.version),
+        "status": str(created.status),
+    }
+
+
+def deployment(client: MLClient, endpoint: str, slot: str, model: str, version: str) -> ManagedOnlineDeployment:
+    """REQ-04, REQ-08: `ml/score.py` with the data collector, on the code and environment registered with `version`."""
+    prep = client.components.get("prep", version=version)
+    collector = DataCollector(
+        {name: DeploymentCollection(enabled="true") for name in ("model_inputs", "model_outputs")}
+    )
+    return ManagedOnlineDeployment(
+        name=slot,
+        endpoint_name=endpoint,
+        model=f"azureml:{MODEL}:{model}",
+        environment=prep.environment,
+        code_configuration=CodeConfiguration(code=prep.code, scoring_script="ml/score.py"),
+        instance_type=SERVING,
+        instance_count=1,
+        app_insights_enabled=True,
+        data_collector=collector,
+    )
+
+
+def monitor(endpoint: str, slot: str) -> MonitorSchedule:
+    """REQ-04, ADR-010: out-of-box GA signals on serverless Spark, daily at 03:15 UTC."""
+    target = MonitoringTarget(ml_task="classification", endpoint_deployment_id=f"azureml:{endpoint}:{slot}")
+    definition = MonitorDefinition(
+        compute=ServerlessSparkCompute(instance_type="standard_e4s_v3", runtime_version="3.4"), monitoring_target=target
+    )
+    daily = RecurrenceTrigger(frequency="day", interval=1, schedule=RecurrencePattern(hours=3, minutes=15))
+    return MonitorSchedule(name=MONITOR, trigger=daily, create_monitor=definition)

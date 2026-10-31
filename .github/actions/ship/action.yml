@@ -1,7 +1,8 @@
 name: ship
 description: >-
   Deploy one image digest and the infrastructure to an environment, keep the endpoint's traffic as it is, smoke-test
-  the app, register the ML components with the image's version, and run a fleet feed operation if one is asked for.
+  the app, register the ML components with the image's version, run a fleet feed operation if one is asked for, submit
+  the training pipeline if asked, and trigger the staging monitor if asked.
   The calling job sets ENVIRONMENT, RG, IMAGE_DIGEST, IMAGE_VERSION, AUTH_CLIENT_ID, ALERT_EMAIL_ADDRESS and the
   shared-base names, and is signed in to Azure.
 
@@ -14,6 +15,14 @@ inputs:
     description: Date from which the firmware-b scenario shifts Series B; empty for none
     required: false
     default: ""
+  train:
+    description: "true submits the training pipeline with this image's components on the latest fleet feed (REQ-02)"
+    required: false
+    default: "false"
+  monitor:
+    description: "true runs the monitor schedule once, which staging has instead of a daily run (ADR-010)"
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -42,6 +51,8 @@ runs:
         echo "::add-mask::$identity"
         echo "APP=$(jq -r .app.value "$RUNNER_TEMP/outputs.json")" >> "$GITHUB_ENV"
         echo "WORKSPACE=$(jq -r .workspace.value "$RUNNER_TEMP/outputs.json")" >> "$GITHUB_ENV"
+        echo "ENDPOINT=$(jq -r .endpoint.value "$RUNNER_TEMP/outputs.json")" >> "$GITHUB_ENV"
+        echo "AML_IDENTITY=$identity" >> "$GITHUB_ENV"
 
     - name: Smoke test, through Easy Auth's excluded health path
       shell: bash
@@ -62,7 +73,7 @@ runs:
           echo "$name $IMAGE_VERSION registered"
         done
 
-    - if: inputs.feed-days != ''
+    - if: inputs.feed-days != '' || inputs.train == 'true'
       uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
         python-version: "3.12"
@@ -80,3 +91,21 @@ runs:
         az ml data create -n fleet-feed -v "$version" --type uri_folder --path "$RUNNER_TEMP/feed" -g "$RG" -w "$WORKSPACE" -o none --only-show-errors \
           --description "Synthetic feed from 2025-11-01, $FEED_DAYS days, firmware-b from ${FIRMWARE_B_FROM:-never}, run $GITHUB_RUN_ID"
         echo "fleet-feed $version registered: $FEED_DAYS days, firmware-b from ${FIRMWARE_B_FROM:-never}"
+
+    - name: Submit the training pipeline (REQ-02)
+      if: inputs.train == 'true'
+      shell: bash
+      run: |
+        pip install --quiet $(grep -h -E '^(azure-ai-ml|azure-identity)==' requirements.txt)
+        python -m ops.train --subscription "$(az account show --query id -o tsv)" --group "$RG" --workspace "$WORKSPACE"           --endpoint "$ENDPOINT" --version "$IMAGE_VERSION" --identity "$AML_IDENTITY"
+
+    - name: Run the monitor once (ADR-010)
+      if: inputs.monitor == 'true'
+      shell: bash
+      run: |
+        if az ml schedule show -n trainyard-monitor -g "$RG" -w "$WORKSPACE" -o none --only-show-errors 2>/dev/null; then
+          az ml schedule trigger -n trainyard-monitor -g "$RG" -w "$WORKSPACE" -o none --only-show-errors
+          echo "trainyard-monitor triggered"
+        else
+          echo "No monitor yet: it is created when a model first serves 100 %"
+        fi

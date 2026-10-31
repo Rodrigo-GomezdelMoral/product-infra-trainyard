@@ -111,6 +111,12 @@ resource endpoint 'Microsoft.MachineLearningServices/workspaces/onlineEndpoints@
   dependsOn: [storageAccess]
 }
 
+resource trafficReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(endpoint.id, app.id, roles.monitoringReader)
+  scope: endpoint
+  properties: { roleDefinitionId: roleId(roles.monitoringReader), principalId: app.principalId, principalType: 'ServicePrincipal' }
+}
+
 #disable-next-line use-recent-api-versions
 resource workspaceLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = { name: 'to-shared-workspace', scope: workspace, properties: allLogs }
 #disable-next-line use-recent-api-versions

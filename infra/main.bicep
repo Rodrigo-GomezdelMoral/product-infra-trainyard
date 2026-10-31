@@ -51,6 +51,12 @@ resource submitAsAml 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   properties: { roleDefinitionId: roleId(roles.identityOperator), principalId: appIdentity.properties.principalId, principalType: 'ServicePrincipal' }
 }
 
+resource routeAsEp 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(epIdentity.id, appIdentity.id, roles.identityOperator)
+  scope: epIdentity
+  properties: { roleDefinitionId: roleId(roles.identityOperator), principalId: appIdentity.properties.principalId, principalType: 'ServicePrincipal' }
+}
+
 module sharedAccess 'modules/shared.bicep' = {
   scope: shared
   params: {
@@ -67,7 +73,7 @@ module ml 'modules/ml.bicep' = {
 }
 
 module app 'modules/app.bicep' = {
-  dependsOn: [sharedAccess, submitAsAml]
+  dependsOn: [sharedAccess, submitAsAml, routeAsEp]
   params: {
     location: location, tags: tags, short: short, maxReplicas: production ? 3 : 2, logAnalyticsId: logAnalyticsId, authClientId: authClientId
     image: '${registry.properties.loginServer}/product-infra-trainyard@${digest}', registryServer: registry.properties.loginServer

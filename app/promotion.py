@@ -18,7 +18,7 @@ from agent_framework import (
     response_handler,
 )
 
-from app.platform import Health, Platform
+from app.platform import Health, NotReadyError, Platform
 from app.store import Lease
 from app.telemetry import event
 
@@ -113,14 +113,15 @@ class Compare(Step):
         if decision != FORWARD[card.step]:
             await ctx.yield_output(f"Model {card.plan.challenger} was not deployed.")
             return
-        await self.platform.deploy(card.plan.slot, card.plan.challenger)
-        await self.go_live(card.plan, ctx)
+        await ctx.send_message(card.plan)
 
 
 class Shadow(Step):
     @handler
     async def start(self, plan: Plan, ctx: WorkflowContext[Plan, str]) -> None:
         await self.platform.deploy(plan.slot, plan.challenger)
+        if not plan.live:
+            return await self.go_live(plan, ctx)
         await self.platform.route({plan.live: 100, plan.slot: 0}, {plan.slot: MIRROR})
         await self.ask(plan, ctx)
 
@@ -209,6 +210,12 @@ class Promotions:
         self.platform, self.storage, self.lease = platform, storage, lease
         self.workflow = partial(build, platform, storage, checks, minutes)
 
+    async def run(self, *start: str, **resume: Any) -> Status:
+        try:
+            return status(await self.workflow().run(*start, **resume))
+        except NotReadyError as waiting:
+            return Status(str(waiting), None)
+
     async def head(self) -> WorkflowCheckpoint | None:
         checkpoints = await self.storage.list_checkpoints(workflow_name=NAME)
         followed = {c.previous_checkpoint_id for c in checkpoints}
@@ -220,11 +227,11 @@ class Promotions:
 
     async def advance(self, head: WorkflowCheckpoint, decision: str | None) -> Status:
         if not head.pending_request_info_events:
-            return status(await self.workflow().run(checkpoint_id=head.checkpoint_id))
+            return await self.run(checkpoint_id=head.checkpoint_id)
         if decision is None:
             return Status(None, pending(head))
         responses = {next(iter(head.pending_request_info_events)): decision}
-        return status(await self.workflow().run(checkpoint_id=head.checkpoint_id, responses=responses))
+        return await self.run(checkpoint_id=head.checkpoint_id, responses=responses)
 
     async def start(self, version: str, approver: str = "") -> Status:
         async with self.lease.hold() as held:
@@ -233,7 +240,7 @@ class Promotions:
             if await self.head():
                 return Status("Another promotion is in progress.", None)
             event("approval_given", approver=approver, step="start", model=version, decision="approve")
-            return status(await self.workflow().run(version))
+            return await self.run(version)
 
     async def answer(self, decision: str, approver: str = "") -> Status:
         async with self.lease.hold() as held:

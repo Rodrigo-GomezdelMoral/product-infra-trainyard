@@ -9,6 +9,7 @@ var roles = {
   foundryUser: '53ca6127-db72-4b80-b1b0-d745d6d5456d'
   metricsPublisher: '3913510d-42f4-4e42-8a64-420c390055eb'
   identityOperator: 'f1a07417-d97a-45cb-824c-7a7467783830'
+  monitoringReader: '43d0d8ad-25c7-4714-9337-8ba259a9fe05'
   cosmosDataContributor: '00000000-0000-0000-0000-000000000002'
 }
 

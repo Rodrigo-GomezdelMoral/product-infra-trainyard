@@ -82,9 +82,15 @@ Azure Machine Learning managed online endpoints already give blue and green depl
 
 | Piece | Phase |
 |---|---|
-| Azure Machine Learning behind `deploy`, `route`, `health`, `watch`, `delete` and `runs` | 8 |
 | The checkpoint container in Bicep, which also holds the lease's partition | 7 |
 | The whole flow live in staging | 8 |
+
+**Phase 8, implemented in `app/azure.py` and tested with the double; live pending:**
+
+- **A deployment takes minutes, a request at most 240 seconds** (the Container Apps ingress). `deploy` starts the deployment and raises `NotReadyError` until it serves; the promotion answers with that message and the one-minute timer runs the step again. So the first model also deploys in `shadow`'s step, which goes straight to 100 % when nothing serves yet. `test_deployment_in_progress_is_finished_by_the_timer`. A failed deployment is created again on the next tick; the owner sees why in the deployment's logs.
+- **Health** is one resource-context query on the endpoint's `AmlOnlineEndpointTrafficLog`, the SLI source of REQ-07 and REQ-08: requests, failed (5xx, 408, 429), p95 and the minutes observed, for one deployment over the last 30 minutes. The app identity reads it with `Monitoring Reader` on the endpoint only (ADR-006).
+- **Agreement** is the share of this week's units that the challenger and the champion flag alike, each scoring the fleet directly with the `azureml-model-deployment` header. Live traffic is that same scoring of the fleet, so it is the agreement the planner would see; those two requests carry their own user agent and stay out of the health counts.
+- **Traffic** is a PUT of the endpoint with the new split; the SDK drops zero shares, so the PUT carries only the mirror the step names, and an empty map ends mirroring (checked live at the first canary).
 
 ## Consequences
 
