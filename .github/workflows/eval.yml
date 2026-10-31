@@ -1,0 +1,89 @@
+name: eval
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/agent.py
+      - app/platform.py
+      - app/promotion.py
+      - app/domain/**
+      - ml/features.py
+      - eval/**
+      - tests/doubles.py
+      - requirements.txt
+      - .github/workflows/eval.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  agent:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    env:
+      FOUNDRY_MODEL: ${{ vars.CHAT_MODEL_DEPLOYMENT }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install the pinned runtime packages
+        run: pip install -r requirements.txt
+
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_PR_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve the shared Foundry project endpoint
+        env:
+          GROUP: ${{ vars.SHARED_RESOURCE_GROUP }}
+          ACCOUNT: ${{ vars.FOUNDRY_ACCOUNT_NAME }}
+          PROJECT: ${{ vars.FOUNDRY_PROJECT_NAME }}
+        run: |
+          endpoint=$(az cognitiveservices account project show -g "$GROUP" -n "$ACCOUNT" --project-name "$PROJECT" \
+            --query 'properties.endpoints."AI Foundry API"' -o tsv)
+          test -n "$endpoint"
+          echo "::add-mask::$endpoint"
+          echo "FOUNDRY_PROJECT_ENDPOINT=$endpoint" >> "$GITHUB_ENV"
+
+      - name: Evaluate the agent against the real model
+        run: python -m eval.run | tee "$RUNNER_TEMP/eval.md" "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment the result on the pull request
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "Agent evaluation of ${HEAD::7} ([run]($RUN))"
+            echo
+            if [ -s "$RUNNER_TEMP/eval.md" ]; then cat "$RUNNER_TEMP/eval.md"; else echo "**The evaluation did not complete.**"; fi
+          } > "$RUNNER_TEMP/comment.md"
+          gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"

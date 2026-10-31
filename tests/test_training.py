@@ -12,7 +12,8 @@ from ml.pipeline import INSTANCE, build, components
 from ml.score import Scorer
 from ml.steps import COMPONENTS, LINEAGE, STEPS, evaluate, fit, gate, local, register, save
 from ops.feed import write
-from tests.conftest import LIMITS, START
+from tests.conftest import LIMITS
+from tests.doubles import START
 
 TAGS = {"git_sha": "abc1234", "data_asset": "fleet-feed", "data_version": "5", "pipeline_job": "training-x"}
 
@@ -80,3 +81,8 @@ def test_register_tags_lineage(splits: dict[str, pd.DataFrame], model: Path, tra
     assert tags["recall"] == f"{report['metrics']['recall']:.4f}" and "champion_precision" in tags
     registered = Path(mlflow.artifacts.download_artifacts(f"models:/trainyard-risk/{version}"))
     assert Scorer.load(registered).calibration == Scorer.load(model).calibration
+
+
+def test_gate_thresholds_match_the_component() -> None:
+    inputs = yaml.safe_load((COMPONENTS / "evaluate.yaml").read_text(encoding="utf-8"))["inputs"]
+    assert {name: inputs[name]["default"] for name in LIMITS} == LIMITS

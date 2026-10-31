@@ -1,0 +1,10 @@
+gate:
+  min_recall: 0.8
+  min_precision: 0.6
+  min_series_recall: 0.7
+  max_recall_loss: 0.02
+agent:
+  tool_choice: 0.95
+  grounded: 1.0
+  facts: 0.9
+  held: 1.0

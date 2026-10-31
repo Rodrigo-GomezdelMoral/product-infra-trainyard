@@ -1,5 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
+from datetime import date
 from typing import Any
 
 import numpy as np
@@ -10,9 +11,9 @@ from app.domain.simulator import Feed
 from app.platform import Endpoint, Health, Model, Scores
 from ml.features import FEATURES, features
 
-WEEK, THRESHOLD = pd.Timestamp("2026-01-26"), 0.44
+START, WEEK, THRESHOLD = date(2026, 1, 1), pd.Timestamp("2026-01-26"), 0.44
 WEIGHTS = pd.Series({"duty_parked": 0.5, "below_cut_in": 0.4, "duty_trend": 0.3, "oil_temperature_max": 0.2})
-LINEAGE = {"data_asset": "fleet-feed", "data_version": "4", "gate": "passed"}
+LINEAGE = {"data_asset": "fleet-feed", "gate": "passed"}
 Reply = Message | Callable[[Sequence[Message]], Message]
 
 
@@ -20,22 +21,16 @@ class FakePlatform:
     def __init__(self, feed: Feed, endpoint: Endpoint | None = None) -> None:
         self.rows = features(feed.telemetry, feed.failures, WEEK)
         self.state = endpoint or Endpoint({"blue": "2"}, {"blue": 100})
+        champion = {"recall": 0.84, "precision": 0.63}
         self.registered = [
             Model(
-                "2",
-                {"recall": 0.84, "precision": 0.63},
-                {**LINEAGE, "pipeline_job": "teal_kettle_7", "git_sha": "9d2c4ab"},
+                "2", champion, LINEAGE | {"data_version": "4", "pipeline_job": "teal_kettle_7", "git_sha": "9d2c4ab"}
             ),
             Model(
                 "3",
-                {"recall": 0.86, "precision": 0.66, "champion_recall": 0.84, "champion_precision": 0.63},
-                {
-                    **LINEAGE,
-                    "data_version": "5",
-                    "pipeline_job": "brave_engine_3",
-                    "git_sha": "4f1e0c2",
-                    "champion": "2",
-                },
+                {"recall": 0.86, "precision": 0.66} | {f"champion_{name}": value for name, value in champion.items()},
+                LINEAGE
+                | {"data_version": "5", "pipeline_job": "brave_engine_3", "git_sha": "4f1e0c2", "champion": "2"},
             ),
         ]
         self.healthy = Health(240, 0, 182.0, 31.0, 0.96)
