@@ -37,7 +37,8 @@ The training pipeline runs on serverless compute and pulls its environment image
 ## State
 
 - **Implemented and tested** in the pipeline definition (`test_pipeline_builds` checks the identity and the instance type on every node, and the job name in the lineage).
-- **Pending:** the identities and roles in the Bicep (phase 7, checked with `what-if` against the conditions of the CI principals); the first live run (phase 8).
+- **Implemented and validated with `what-if`** (phase 7): the three identities and their roles in `infra/main.bicep`; the workspace's primary user-assigned identity is `id-trainyard-aml-<env>`, which Learn also makes the default identity of serverless compute. In both groups, the 13 Azure role assignments fall within the CI principals' conditions, and the Cosmos DB data role is a SQL role assignment.
+- **Pending:** the first live run (phase 8).
 - **NOT VERIFIED until phase 8:** whether the workspace's grants to its own system identity run with the deployer's permissions. The CI principals' conditions allow both cases.
 
 ## Consequences

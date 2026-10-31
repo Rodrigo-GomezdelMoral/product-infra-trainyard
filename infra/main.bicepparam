@@ -1,0 +1,16 @@
+using 'main.bicep'
+
+param env = readEnvironmentVariable('ENVIRONMENT')
+param digest = readEnvironmentVariable('IMAGE_DIGEST')
+param version = readEnvironmentVariable('IMAGE_VERSION')
+param authClientId = readEnvironmentVariable('AUTH_CLIENT_ID')
+param alertEmail = readEnvironmentVariable('ALERT_EMAIL_ADDRESS')
+param traffic = json(readEnvironmentVariable('ENDPOINT_TRAFFIC', '{}'))
+param mirrorTraffic = json(readEnvironmentVariable('ENDPOINT_MIRROR_TRAFFIC', '{}'))
+param sharedResourceGroup = readEnvironmentVariable('SHARED_RESOURCE_GROUP')
+param registryName = readEnvironmentVariable('REGISTRY_NAME')
+param logAnalyticsName = readEnvironmentVariable('LOG_ANALYTICS_WORKSPACE_NAME')
+param actionGroupName = readEnvironmentVariable('ACTION_GROUP_NAME')
+param foundryName = readEnvironmentVariable('FOUNDRY_ACCOUNT_NAME')
+param projectName = readEnvironmentVariable('FOUNDRY_PROJECT_NAME')
+param chatModel = readEnvironmentVariable('CHAT_MODEL_DEPLOYMENT')
