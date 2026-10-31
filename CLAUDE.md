@@ -71,9 +71,9 @@ Checked on 2026-10-30 against Microsoft Learn and PyPI. Each phase re-checks aga
 
 | Purpose | Package and members |
 |---|---|
-| Agent | `agent-framework-core==1.23.0`: `Agent`, `tool` (`approval_mode="always_require"`), `Message`, `WorkflowBuilder`, executors with `ctx.request_info(...)` and `@response_handler`, `InMemoryCheckpointStorage` in tests |
+| Agent | `agent-framework-core==1.23.0`: `Agent`, `tool` (`approval_mode="always_require"`), `Message`, `WorkflowBuilder`, executors with `ctx.request_info(...)` and `@response_handler`, `InMemoryCheckpointStorage` in tests. Run every conversation with a session: then only `always_require` tools wait for approval in a mixed batch (ADR-001) |
 | Model client | `agent-framework-foundry==1.15.0`: `from agent_framework.foundry import FoundryChatClient`, `FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_MODEL`; needs `azure-ai-projects>=2.2.0,<2.8.0` |
-| Checkpoints and history | `agent-framework-azure-cosmos==1.0.0b261015` (beta): `CosmosCheckpointStorage`, `CosmosHistoryProvider`; the Bicep creates the database and containers; if the class still fails against Entra-only Cosmos DB, a 30-line store in `app/` replaces it, with an ADR |
+| Checkpoints and history | `agent-framework-azure-cosmos==1.0.0b261015` (beta): `CosmosCheckpointStorage`, `CosmosHistoryProvider`; the Bicep creates the database and containers; if the class still fails against Entra-only Cosmos DB, a 30-line store in `app/` replaces it, with an ADR. Pass `container_client=`, which skips auto-creation; the checkpoint container has partition key `/workflow_name` and indexes `/timestamp`. The open promotion is the head of the checkpoint chain, never `get_latest` (timestamps tie; ADR-009) |
 | Azure ML | `azure-ai-ml==1.35.2`: `MLClient`, `load_component`, `dsl.pipeline`, `ManagedIdentityConfiguration`, `ManagedOnlineDeployment`, `MonitorSchedule`; `endpoint.mirror_traffic`, `endpoint.traffic` |
 | Tracking | `mlflow==2.22.5` with `azureml-mlflow==1.62.0.post6`; not MLflow 3 (ADR-011) |
 | Model | `lightgbm==4.7.0` (`LGBMClassifier`, `predict(..., pred_contrib=True)`), `scikit-learn==1.9.1` |
@@ -91,7 +91,7 @@ Python 3.12 everywhere, including the Azure ML environment.
 |---|---|
 | `enableDataIsolation` with a Basic registry and a user-assigned identity | 7 (Learn), 8 (live) |
 | Whether the workspace's grants to its own system identity run with the deployer's permissions (the role conditions allow both) | 8 |
-| `agent-framework-azure-cosmos` against Entra-only Cosmos DB | 2, 8 |
+| `agent-framework-azure-cosmos` against Entra-only Cosmos DB (phase 2: no auto-creation with `container_client`, and a full promotion round trip on the emulator) | 8 |
 | The custom-events API of `azure-monitor-opentelemetry` | 5 |
 | Spark nodes per monitor run (cost), and whether `AmlRunStatusChangedEvent` carries the monitor's experiment name | 8 |
 | Easy Auth sign-in without a client secret | 8 |
