@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from app import telemetry
 from app.agent import APPROVER, Tools, build_agent
+from app.azure import AzureML
 from app.platform import Platform
 from app.promotion import Promotions
 from app.store import Conversations, Lease, messages
@@ -237,3 +238,8 @@ def create(open_services: Callable[[], AbstractAsyncContextManager[Services]], t
         api.add_exception_handler(kind, unavailable)
     api.mount("/", StaticFiles(directory="web/dist", html=True, check_dir=False), name="web")
     return api
+
+
+def serve() -> FastAPI:
+    """The deployed app (`uvicorn app.main:serve --factory`): Azure Machine Learning behind the platform seam."""
+    return create(lambda: connect(AzureML()))

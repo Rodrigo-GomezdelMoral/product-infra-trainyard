@@ -7,7 +7,7 @@ import pytest
 from agent_framework import CheckpointStorage, FileCheckpointStorage, InMemoryCheckpointStorage
 
 from app.domain.simulator import Feed
-from app.platform import Endpoint, Health, Model
+from app.platform import Endpoint, Health, Model, NotReadyError
 from app.promotion import BUSY, Status, ready
 from tests.doubles import FakeContainer, FakePlatform, promotions
 
@@ -137,3 +137,17 @@ def test_first_model_window_rollback_and_refusals(feed: Feed, events: Events) ->
     ]
     promoted = [a for name, a in events() if name == "model_promoted"]
     assert "drift_to_promotion_hours" in promoted[1] and promoted[1]["drift_to_promotion_hours"] > 0
+
+
+def test_deployment_in_progress_is_finished_by_the_timer(feed: Feed, monkeypatch: pytest.MonkeyPatch) -> None:
+    platform, storage, deploy = FakePlatform(feed, Endpoint({}, {})), InMemoryCheckpointStorage(), FakePlatform.deploy
+    waits = iter([NotReadyError("Model 2 is being deployed to blue.")])
+
+    async def slow(slot: str, version: str) -> None:
+        if wait := next(waits, None):
+            raise wait
+        await deploy(platform, slot, version)
+
+    monkeypatch.setattr(platform, "deploy", slow)
+    outcomes = steps(platform, lambda: storage, "start 2", "approve", "tick")
+    assert outcomes == ["first", "Model 2 is being deployed to blue.", "Model 2 serves 100 % from blue."]
