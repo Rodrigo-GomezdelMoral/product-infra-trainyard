@@ -89,4 +89,5 @@ jobs:
       - uses: ./.github/actions/ship
         with:
           feed-days: ${{ inputs.feed_days }}
+          train: ${{ github.event_name == 'release' }}
           firmware-b-from: ${{ inputs.firmware_b_from }}

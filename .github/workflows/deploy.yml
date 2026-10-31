@@ -17,6 +17,10 @@ on:
         description: Date (YYYY-MM-DD) from which the firmware-b scenario shifts Series B; empty for none
         required: false
         default: ""
+      monitor:
+        description: Run the monitor once, ADR-010 (staging has no daily run)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -53,6 +57,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Rehearse training when the model, the domain or the data changed (REQ-02)
+        id: changes
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          changed=true
+          if git cat-file -e "$BEFORE^{commit}" 2>/dev/null && git diff --quiet "$BEFORE" HEAD -- ml app/domain data; then
+            changed=false
+          fi
+          echo "train=$changed" >> "$GITHUB_OUTPUT"
 
       - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
@@ -82,6 +99,8 @@ jobs:
         with:
           feed-days: ${{ inputs.feed_days }}
           firmware-b-from: ${{ inputs.firmware_b_from }}
+          train: ${{ steps.changes.outputs.train == 'true' }}
+          monitor: ${{ inputs.monitor == true }}
 
       - name: Record the digest staging runs for this commit, which the release promotes
         if: inputs.digest == ''
