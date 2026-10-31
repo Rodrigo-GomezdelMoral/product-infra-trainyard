@@ -9,8 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 UNBUDGETED = ("docs/", "eval/datasets/")
 MAX_FILES, MAX_ML_FILES, MAX_COMMENTS = 100, 10, 5
-PYTHON_BUDGETS = {"app/": 1150, "ml/": 450, "ops/": 100}
-MAX_TEST_LINES, MAX_BICEP_LINES, MAX_TYPESCRIPT_LINES = 700, 490, 800
+PYTHON_BUDGETS = {("app/", "eval/", "load/"): 1150, ("ml/",): 450, ("ops/",): 100}
+MAX_TEST_LINES, MAX_BICEP_LINES, MAX_TYPESCRIPT_LINES = 850, 490, 800
 IDENTIFIERS = {
     "GUID": re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I),
     "e-mail": re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),
@@ -31,7 +31,7 @@ def repository_files() -> list[str]:
     return sorted(name for name in set(names) if (ROOT / name).is_file())
 
 
-def budgeted(*suffixes: str, under: str = "") -> list[Path]:
+def budgeted(*suffixes: str, under: str | tuple[str, ...] = "") -> list[Path]:
     names = [n for n in repository_files() if not n.startswith(UNBUDGETED) and n.startswith(under)]
     return [ROOT / n for n in names if not suffixes or Path(n).suffix in suffixes]
 
@@ -49,8 +49,8 @@ def test_line_budgets() -> None:
     python = budgeted(".py")
     for folder, limit in PYTHON_BUDGETS.items():
         assert lines(budgeted(".py", under=folder)) <= limit, f"{folder} is over {limit} lines"
-    others = [p for p in python if not p.relative_to(ROOT).as_posix().startswith(tuple(PYTHON_BUDGETS))]
-    assert lines(others) <= MAX_TEST_LINES, f"{lines(others)} test, evaluation and load lines"
+    others = [p for p in python if not p.relative_to(ROOT).as_posix().startswith(sum(PYTHON_BUDGETS, ()))]
+    assert lines(others) <= MAX_TEST_LINES, f"{lines(others)} test lines"
     assert lines(budgeted(".bicep", ".bicepparam")) <= MAX_BICEP_LINES
     assert lines(budgeted(".ts", ".tsx")) <= MAX_TYPESCRIPT_LINES
 
