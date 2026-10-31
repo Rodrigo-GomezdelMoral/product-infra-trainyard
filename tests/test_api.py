@@ -19,7 +19,7 @@ READER, DOWN = "Reader", "The language model is unavailable; try again in a minu
 
 
 def signed(role: str, oid: str = "planner-1") -> dict[str, str]:
-    claims = [{"typ": "roles", "val": role}, {"typ": "oid", "val": oid}]
+    claims = [{"typ": "roles", "val": role}, {"typ": "oid", "val": oid}, {"typ": "name", "val": "Leo Owner"}]
     return {"X-MS-CLIENT-PRINCIPAL": base64.b64encode(json.dumps({"claims": claims}).encode()).decode()}
 
 
@@ -46,7 +46,8 @@ def sse(text: str) -> list[tuple[str, Any]]:
 def test_sign_in_and_roles(platform: FakePlatform) -> None:
     with serve(platform) as client:
         assert [client.get("/api/me", headers=h).status_code for h in ({}, signed("Guest"))] == [401, 403]
-        assert client.get("/api/me", headers=signed("ModelApprover")).json() == {"roles": ["ModelApprover"]}
+        me = client.get("/api/me", headers=signed("ModelApprover")).json()
+        assert me == {"name": "Leo Owner", "roles": ["ModelApprover"]}
         assert client.get("/api/fleet/risk", headers=signed(READER)).json()["inspection_budget"] == INSPECTION_BUDGET
         changes = [client.get("/api/promotion", headers=signed(READER))]
         changes += [client.post("/api/promotion", headers=signed(READER), json={"decision": "promote"})]

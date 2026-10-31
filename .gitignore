@@ -221,3 +221,10 @@ __marimo__/
 
 # Local training runs: feed, MLflow store, models
 .local/
+
+# Web client: dependencies, builds, Playwright output, local copy of the e2e runs
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+web/src/demo/runs/e2e.json
