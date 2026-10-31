@@ -10,16 +10,15 @@ from statistics import fmean, quantiles
 from time import perf_counter
 from typing import Any
 
-from agent_framework import InMemoryCheckpointStorage, SupportsChatGetResponse
+from agent_framework import SupportsChatGetResponse
 from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 
 from app.agent import Tools, build_agent
 from app.domain.simulator import Feed, simulate
 from app.platform import Endpoint
-from app.promotion import Promotions
 from eval.evaluators import THRESHOLDS, checks
-from tests.doubles import START, FakePlatform
+from tests.doubles import START, FakePlatform, promotions
 
 DATASET, CONCURRENCY, RETRIES = Path(__file__).parent / "datasets" / "agent.jsonl", 2, 8
 CASES = [json.loads(line) for line in DATASET.read_text(encoding="utf-8").splitlines()]
@@ -30,7 +29,7 @@ Outcome = tuple[dict[str, bool], float, float, str]
 
 async def answer(client: SupportsChatGetResponse[Any], feed: Feed, case: Case, limit: asyncio.Semaphore) -> Outcome:
     platform = FakePlatform(feed, Endpoint(**case["endpoint"]) if "endpoint" in case else None)
-    tools = Tools(platform, Promotions(platform, InMemoryCheckpointStorage(), checks=1, interval=0))
+    tools = Tools(platform, promotions(platform))
     agent = build_agent(client, tools, [case["role"]])
     async with limit:
         began = perf_counter()

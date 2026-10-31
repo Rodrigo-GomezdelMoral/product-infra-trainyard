@@ -1,17 +1,22 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 import mlflow
 import pandas as pd
 import pytest
+from opentelemetry.instrumentation.logging.handler import LoggingHandler
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter, SimpleLogRecordProcessor
 
 from app.domain.simulator import Feed, simulate
+from app.telemetry import LOGGER
 from eval.evaluators import THRESHOLDS
 from ml.features import training_rows
 from ml.steps import fit, save, split
 from tests.doubles import START, FakePlatform
 
-LIMITS = THRESHOLDS["gate"]
+LIMITS, EVENT = THRESHOLDS["gate"], "microsoft.custom_event.name"
 
 
 @pytest.fixture(scope="session")
@@ -53,3 +58,14 @@ def tracking(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def platform(feed: Feed) -> FakePlatform:
     return FakePlatform(feed)
+
+
+@pytest.fixture
+def events() -> Iterator[Callable[[], list[tuple[str, dict[str, Any]]]]]:
+    exporter, provider = InMemoryLogRecordExporter(), LoggerProvider()
+    provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
+    LOGGER.addHandler(handler := LoggingHandler(logger_provider=provider))
+    yield lambda: [
+        (str(a.pop(EVENT)), a) for a in (dict(r.log_record.attributes or {}) for r in exporter.get_finished_logs())
+    ]
+    LOGGER.removeHandler(handler)

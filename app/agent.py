@@ -11,6 +11,7 @@ from agent_framework import Agent, SupportsChatGetResponse, tool
 from app.domain.fleet import INSPECTION_BUDGET, explain, plan
 from app.platform import Platform, Scores
 from app.promotion import Promotions
+from app.telemetry import event
 from ml.features import HORIZON
 
 APPROVER, MAX_TOKENS = "ModelApprover", 4000
@@ -36,8 +37,8 @@ def pct(share: float) -> str:
 
 
 class Tools:
-    def __init__(self, platform: Platform, promotions: Promotions) -> None:
-        self.platform, self.promotions = platform, promotions
+    def __init__(self, platform: Platform, promotions: Promotions, approver: str = "") -> None:
+        self.platform, self.promotions, self.approver = platform, promotions, approver
 
     async def scored(self) -> tuple[pd.DataFrame, Scores]:
         rows = await self.platform.week()
@@ -95,15 +96,16 @@ class Tools:
 
     async def start_retraining(self) -> str:
         """Retrain: submit prepare, train, evaluate and register on the latest fleet data, on serverless compute."""
+        event("approval_given", approver=self.approver, step="retrain", decision="approve")
         return dump(**await self.platform.retrain())
 
     async def start_promotion(self, version: Annotated[str, "The registered model version, for example 3"]) -> str:
         """Start promoting a registered model: comparison, shadow, canary at 10 %, then 100 %, each step approved."""
-        return dump(**asdict(await self.promotions.start(version)))
+        return dump(**asdict(await self.promotions.start(version, self.approver)))
 
     async def rollback(self) -> str:
         """Roll back the promotion in progress: the previous model goes back to 100 % of live traffic."""
-        return dump(**asdict(await self.promotions.answer("rollback")))
+        return dump(**asdict(await self.promotions.answer("rollback", self.approver)))
 
 
 def build_agent(client: SupportsChatGetResponse[Any], tools: Tools, roles: Iterable[str]) -> Agent[Any]:

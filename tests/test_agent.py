@@ -3,17 +3,16 @@ import json
 from typing import Any
 
 import pytest
-from agent_framework import Agent, AgentResponse, InMemoryCheckpointStorage, Message
+from agent_framework import Agent, AgentResponse, Message
 
 from app.agent import INSTRUCTIONS, Tools, build_agent
-from app.promotion import Promotions
 from eval.evaluators import numbers
 from eval.run import CASES, evaluate
-from tests.doubles import FakePlatform, Reply, Scripted, call, echo, results, say
+from tests.doubles import FakePlatform, Reply, Scripted, call, echo, promotions, results, say
 
 
 def setup(platform: FakePlatform, role: str, *script: Reply) -> tuple[Agent[Any], Tools]:
-    tools = Tools(platform, Promotions(platform, InMemoryCheckpointStorage(), checks=1, interval=0))
+    tools = Tools(platform, promotions(platform))
     return build_agent(Scripted(*script), tools, [role]), tools
 
 

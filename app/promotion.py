@@ -1,7 +1,7 @@
 """REQ-03, REQ-05: the model promotion as a checkpointed workflow; each traffic change waits for the owner."""
 
-import asyncio
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from functools import partial
 from typing import Any, Never
 
@@ -19,8 +19,10 @@ from agent_framework import (
 )
 
 from app.platform import Health, Platform
+from app.store import Lease
+from app.telemetry import event
 
-NAME, SLOTS = "promotion", ("blue", "green")
+NAME, SLOTS, CHECK = "promotion", ("blue", "green"), "check"
 MIRROR, CANARY, SHADOW_REQUESTS, SHADOW_MINUTES, MAX_RECALL_LOSS, MAX_SUPERSTEPS = 20, 10, 200, 30, 0.02, 1000
 FORWARD = {"first": "approve", "shadow": "approve", "canary": "promote", "window": "close"}
 
@@ -58,23 +60,32 @@ def ready(shadow: Health) -> bool:
     )
 
 
+def hours_since(moment: str) -> float:
+    return (datetime.now(UTC) - datetime.fromisoformat(moment)).total_seconds() / 3600
+
+
 class Step(Executor):
     def __init__(self, platform: Platform) -> None:
         super().__init__(id=type(self).__name__.lower())
         self.platform = platform
 
     async def go_live(self, plan: Plan, ctx: WorkflowContext[Plan, str]) -> None:
+        breached = (await self.platform.monitor()).get("breached_at")
         await self.platform.route({plan.slot: 100} | ({plan.live: 0} if plan.live else {}), {})
         await self.platform.watch(plan.slot)
+        hours = round(hours_since(breached), 2) if breached else None
+        event("model_promoted", model=plan.challenger, drift_to_promotion_hours=hours)
         if plan.live:
             await ctx.send_message(plan)
         else:
             await ctx.yield_output(f"Model {plan.challenger} serves 100 % from {plan.slot}.")
 
-    async def undo(self, plan: Plan, ctx: WorkflowContext[Any, str], why: str) -> None:
+    async def undo(self, plan: Plan, ctx: WorkflowContext[Any, str], why: str, rolled_back: bool = True) -> None:
         await self.platform.route({plan.live: 100, plan.slot: 0}, {})
         await self.platform.watch(plan.live)
         await self.platform.delete(plan.slot)
+        if rolled_back:
+            event("model_rolled_back", model=plan.challenger, reason=why)
         await ctx.yield_output(f"Model {plan.challenger} removed ({why}); model {plan.champion} serves 100 %.")
 
 
@@ -122,7 +133,7 @@ class Shadow(Step):
     @response_handler
     async def decide(self, card: Card, decision: str, ctx: WorkflowContext[Plan, str]) -> None:
         if decision != FORWARD[card.step]:
-            await self.undo(card.plan, ctx, "stopped in shadow")
+            await self.undo(card.plan, ctx, "stopped in shadow", rolled_back=False)
         elif ready(await self.platform.health(card.plan.slot)):
             await ctx.send_message(card.plan)
         else:
@@ -130,27 +141,30 @@ class Shadow(Step):
 
 
 class Canary(Step):
-    def __init__(self, platform: Platform, checks: int, interval: float) -> None:
+    def __init__(self, platform: Platform, checks: int, minutes: float) -> None:
         super().__init__(platform)
-        self.checks, self.interval = max(checks, 1), interval
+        self.checks, self.minutes = checks, minutes
 
     @handler
     async def start(self, plan: Plan, ctx: WorkflowContext[Plan, str]) -> None:
         await self.platform.route({plan.live: 100 - CANARY, plan.slot: CANARY}, {})
-        for _ in range(self.checks):
-            await asyncio.sleep(self.interval)
-            health = await self.platform.health(plan.slot)
-            if not health.ok:
-                await self.undo(plan, ctx, f"canary failed: {health.failed} failed, p95 {health.p95_ms:.0f} ms")
-                return
-        await ctx.request_info(Card("canary", plan, asdict(health)), str)
+        facts = {"started": datetime.now(UTC).isoformat(), "checks": 0, "ready": False}
+        await ctx.request_info(Card("canary", plan, facts), str)
 
     @response_handler
     async def decide(self, card: Card, decision: str, ctx: WorkflowContext[Plan, str]) -> None:
-        if decision == FORWARD[card.step]:
-            await self.go_live(card.plan, ctx)
-        else:
-            await self.undo(card.plan, ctx, "rolled back from canary")
+        plan, checks = card.plan, card.facts["checks"] + 1
+        if decision not in (CHECK, FORWARD[card.step]):
+            return await self.undo(plan, ctx, "rolled back from canary")
+        health = await self.platform.health(plan.slot)
+        if not health.ok:
+            return await self.undo(plan, ctx, f"canary failed: {health.failed} failed, p95 {health.p95_ms:.0f} ms")
+        if decision == CHECK or not card.facts["ready"]:
+            elapsed = round(hours_since(card.facts["started"]) * 60, 1)
+            done = checks >= self.checks and elapsed >= self.minutes
+            facts = card.facts | asdict(health) | {"checks": checks, "elapsed": elapsed, "ready": done}
+            return await ctx.request_info(Card("canary", plan, facts), str)
+        await self.go_live(plan, ctx)
 
 
 class Window(Step):
@@ -167,11 +181,11 @@ class Window(Step):
         await ctx.yield_output(f"Model {card.plan.challenger} serves 100 %; model {card.plan.champion} was removed.")
 
 
-def build(platform: Platform, storage: CheckpointStorage, checks: int, interval: float) -> Workflow:
+def build(platform: Platform, storage: CheckpointStorage, checks: int, minutes: float) -> Workflow:
     compare, shadow, canary, window = (
         Compare(platform),
         Shadow(platform),
-        Canary(platform, checks, interval),
+        Canary(platform, checks, minutes),
         Window(platform),
     )
     builder = WorkflowBuilder(MAX_SUPERSTEPS, NAME, start_executor=compare, checkpoint_storage=storage)
@@ -183,10 +197,17 @@ def status(result: WorkflowRunResult) -> Status:
     return Status(outputs[-1] if outputs else None, requests[0].data if requests else None)
 
 
+def pending(head: WorkflowCheckpoint | None) -> Card | None:
+    card: Card | None = next((e.data for e in (head.pending_request_info_events if head else {}).values()), None)
+    return card
+
+
 class Promotions:
-    def __init__(self, platform: Platform, storage: CheckpointStorage, checks: int = 15, interval: float = 60) -> None:
-        self.storage, self.workflow = storage, partial(build, platform, storage, checks, interval)
-        self.lock = asyncio.Lock()
+    def __init__(
+        self, platform: Platform, storage: CheckpointStorage, lease: Lease, checks: int = 15, minutes: float = 15
+    ) -> None:
+        self.platform, self.storage, self.lease = platform, storage, lease
+        self.workflow = partial(build, platform, storage, checks, minutes)
 
     async def head(self) -> WorkflowCheckpoint | None:
         checkpoints = await self.storage.list_checkpoints(workflow_name=NAME)
@@ -194,31 +215,53 @@ class Promotions:
         unfinished = [c for c in checkpoints if c.pending_request_info_events or any(c.messages.values())]
         return next((c for c in unfinished if c.checkpoint_id not in followed), None)
 
-    async def start(self, version: str) -> Status:
-        if self.lock.locked():
-            return BUSY
-        async with self.lock:
+    async def card(self) -> Card | None:
+        return pending(await self.head())
+
+    async def advance(self, head: WorkflowCheckpoint, decision: str | None) -> Status:
+        if not head.pending_request_info_events:
+            return status(await self.workflow().run(checkpoint_id=head.checkpoint_id))
+        if decision is None:
+            return Status(None, pending(head))
+        responses = {next(iter(head.pending_request_info_events)): decision}
+        return status(await self.workflow().run(checkpoint_id=head.checkpoint_id, responses=responses))
+
+    async def start(self, version: str, approver: str = "") -> Status:
+        async with self.lease.hold() as held:
+            if held is None:
+                return BUSY
             if await self.head():
                 return Status("Another promotion is in progress.", None)
+            event("approval_given", approver=approver, step="start", model=version, decision="approve")
             return status(await self.workflow().run(version))
 
-    async def answer(self, decision: str) -> Status:
-        if self.lock.locked():
-            return BUSY
-        async with self.lock:
+    async def answer(self, decision: str, approver: str = "") -> Status:
+        async with self.lease.hold() as held:
+            if held is None:
+                return BUSY
             head = await self.head()
-            if not head or not head.pending_request_info_events:
+            if not head or not (card := pending(head)):
                 return Status("No promotion is waiting for a decision.", None)
-            responses = {next(iter(head.pending_request_info_events)): decision}
-            return status(await self.workflow().run(checkpoint_id=head.checkpoint_id, responses=responses))
+            event("approval_given", approver=approver, step=card.step, model=card.plan.challenger, decision=decision)
+            return await self.advance(head, decision)
 
     async def resume(self) -> Status:
-        if self.lock.locked():
-            return BUSY
-        async with self.lock:
+        async with self.lease.hold() as held:
+            if held is None:
+                return BUSY
             head = await self.head()
-            if not head:
-                return Status("No promotion is in progress.", None)
-            if head.pending_request_info_events:
-                return Status(None, next(iter(head.pending_request_info_events.values())).data)
-            return status(await self.workflow().run(checkpoint_id=head.checkpoint_id))
+            return await self.advance(head, None) if head else Status("No promotion is in progress.", None)
+
+    async def tick(self) -> Status:
+        async with self.lease.hold() as held:
+            if held is None:
+                return BUSY
+            for run in await self.platform.runs(held.get("reported", "")):
+                event("retrain_completed", pipeline_job=run.job, duration_minutes=run.minutes, model=run.version)
+                event("model_evaluated", pipeline_job=run.job, recall_7d=run.recall_7d, precision_7d=run.precision_7d)
+                held["reported"] = max(held.get("reported", ""), run.ended)
+            head = await self.head()
+            card = pending(head)
+            if head and (card is None or (card.step == "canary" and not card.facts["ready"])):
+                return await self.advance(head, CHECK)
+            return Status(None, card)

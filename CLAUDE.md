@@ -43,10 +43,10 @@ Publish: ../_scripts/product-infra-trainyard/publish-<branch>.sh
    |---|---|---|
    | Files | every file outside `docs/` and `eval/datasets/` | 100 |
    | `ml/` files | every file under `ml/` (ADR-003) | 10 |
-   | Python app | `.py` under `app/` | 1,150 |
+   | Python app | `.py` under `app/`, `eval/` and `load/` | 1,150 |
    | Python ml | `.py` under `ml/` | 450 |
    | Python ops | `.py` under `ops/` | 100 |
-   | Tests | every other `.py`: `tests/`, `eval/`, `load/` | 700 |
+   | Tests | every other `.py`: `tests/` (ADR-003) | 850 |
    | Bicep | `.bicep` and `.bicepparam` | 490 |
    | TypeScript | `.ts` and `.tsx` | 800 |
    | Comments | `#` comments in Python | 5 |
@@ -73,12 +73,13 @@ Checked on 2026-10-30 against Microsoft Learn and PyPI. Each phase re-checks aga
 |---|---|
 | Agent | `agent-framework-core==1.23.0`: `Agent`, `tool` (`approval_mode="always_require"`), `Message`, `WorkflowBuilder`, executors with `ctx.request_info(...)` and `@response_handler`, `InMemoryCheckpointStorage` in tests. Run every conversation with a session: then only `always_require` tools wait for approval in a mixed batch (ADR-001) |
 | Model client | `agent-framework-foundry==1.15.0`: `from agent_framework.foundry import FoundryChatClient`, `FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_MODEL`; needs `azure-ai-projects>=2.2.0,<2.8.0` |
-| Checkpoints and history | `agent-framework-azure-cosmos==1.0.0b261015` (beta): `CosmosCheckpointStorage`, `CosmosHistoryProvider`; the Bicep creates the database and containers; if the class still fails against Entra-only Cosmos DB, a 30-line store in `app/` replaces it, with an ADR. Pass `container_client=`, which skips auto-creation; the checkpoint container has partition key `/workflow_name` and indexes `/timestamp`. The open promotion is the head of the checkpoint chain, never `get_latest` (timestamps tie; ADR-009) |
+| Checkpoints | `agent-framework-azure-cosmos==1.0.0b261015` (beta): `CosmosCheckpointStorage`; the Bicep creates the database and containers; if the class still fails against Entra-only Cosmos DB, a 30-line store in `app/` replaces it, with an ADR. Pass `container_client=`, which skips auto-creation; the checkpoint container has partition key `/workflow_name` and indexes `/timestamp`. The open promotion is the head of the checkpoint chain, never `get_latest` (timestamps tie; ADR-009). The same container holds the promotion lease, document `promotion` in partition `lease`, taken with create-if-absent or `If-Match` (ADR-009) |
+| Conversations | Not `CosmosHistoryProvider`: an approval needs the session's `tool_approval` state, which the provider does not store. Each conversation is one document, `AgentSession.to_dict()`, in container `conversations` with partition key `/owner` (a SHA-256 prefix of the object id) and a 30-day default TTL (ADR-016) |
 | Azure ML | `azure-ai-ml==1.35.2`: `MLClient`, `load_component`, `dsl.pipeline`, `ManagedIdentityConfiguration`, `ManagedOnlineDeployment`, `MonitorSchedule`; `endpoint.mirror_traffic`, `endpoint.traffic`. Call `pipeline(func, name=..., default_compute="serverless")` with the function, which mypy types; the decorator form without it does not type-check. Component specs in `ml/components/*.yaml` use `code: ../..`, with the `.amlignore` allowlist `/*` and `!/ml/` (gitwildmatch, last match wins; the SDK's upload walker lists only `ml/`), and an inline environment `build: path: ../environment`. A pipeline node's environment is on `node.component`. Unbound optional inputs are absent from `job._to_dict()`, but present on the node object. `azure-ai-ml` raises Marshmallow 4 deprecation warnings on import |
 | Tracking | `mlflow==2.22.5` with `azureml-mlflow==1.62.0.post6`; not MLflow 3 (ADR-011). No stage tags or aliases: lineage and metrics are version tags, and the calibration and threshold are MLmodel `metadata`. `mlflow.lightgbm.save_model` creates the default store in the working directory, so the tests use a session store and the Makefile `.local/mlruns`. On Python 3.12, MLflow 2.22 warns about `datetime.utcnow()` and its own type hints; `pyproject.toml` ignores exactly those |
 | Model | `lightgbm==4.7.0` (`LGBMClassifier`, `predict(..., pred_contrib=True)`), `scikit-learn==1.9.1` |
 | Scoring | `azureml-inference-server-http==1.5.1` (`azmlinfsrv`), `azureml-ai-monitoring==1.0.0` (`Collector(name="model_inputs", on_error=...)`, `Collector(name="model_outputs", ...)`). Without `on_error`, the collector raises as soon as it is created when collection is off. `AZUREML_MDC_ENABLED=true` with `AZUREML_MDC_LOCAL_CAPTURE=true` logs each payload through the `local.capture` logger, which does not propagate. The base image's runit service runs `azmlinfsrv --entry_script $AZUREML_ENTRY_SCRIPT` from `AML_APP_ROOT`. `AZUREML_MODEL_DIR` is `azureml-models/<name>/<version>` (Learn). The inference server pins OpenTelemetry 1.33, so it lives only in `ml/environment`, never in the app's requirements |
-| API | FastAPI 0.162.0, `azure-identity`, `azure-cosmos`, `azure-storage-blob`, `azure-monitor-opentelemetry` |
+| API | FastAPI 0.162.0 with its own Server-Sent Events (`fastapi.sse.EventSourceResponse`), `azure-identity`, `azure-cosmos==4.17.1`, `azure-monitor-opentelemetry==1.8.11`. KPI events are custom events: a log record on the `trainyard` logger with `microsoft.custom_event.name` (Learn and the installed exporter, ADR-016); `enable_trace_based_sampling_for_logs=False`. Easy Auth's `X-MS-CLIENT-PRINCIPAL` gives the roles; clients cannot set it. Tests use `fastapi.testclient` (`httpx`, dev only) and an in-memory OpenTelemetry log exporter |
 | Data | `numpy==2.4.4`, `pandas==2.3.3`, `pandas-stubs==2.3.3.260113` for mypy. MLflow 2.22.5 requires `pandas<3`, and numpy 2.5 raises deprecation warnings under pandas 2.3.3 (checked in phase 1), so Dependabot ignores pandas majors and numpy minors. The Azure ML environment pins the same two versions: `ml/features.py` must give identical rows in the app and in `prep` |
 | Load | `locust==2.47.0` |
 | Bicep | `Microsoft.MachineLearningServices/workspaces` and `workspaces/onlineEndpoints@2026-09-01`; `Microsoft.App/containerApps` and `authConfigs@2026-07-01`; `Microsoft.Insights/workbooks@2023-06-01`, `scheduledQueryRules@2023-12-01`, `metricAlerts@2018-03-01`; `Microsoft.Consumption/budgets@2026-06-01`; storage `@2026-06-01`, Key Vault `@2026-02-01`, managed identities `@2024-11-30`; Cosmos DB: the latest GA, checked in phase 7 |
@@ -92,7 +93,6 @@ Python 3.12 everywhere, including the Azure ML environment.
 | `enableDataIsolation` with a Basic registry and a user-assigned identity | 7 (Learn), 8 (live) |
 | Whether the workspace's grants to its own system identity run with the deployer's permissions (the role conditions allow both) | 8 |
 | `agent-framework-azure-cosmos` against Entra-only Cosmos DB (phase 2: no auto-creation with `container_client`, and a full promotion round trip on the emulator) | 8 |
-| The custom-events API of `azure-monitor-opentelemetry` | 5 |
 | Spark nodes per monitor run (cost), and whether `AmlRunStatusChangedEvent` carries the monitor's experiment name | 8 |
 | The workspace building the environment from the build context `ml/environment` into the shared Basic registry, for serverless jobs and the online deployment (fallback: image plus conda file, measured in care-intel) | 8 |
 | Easy Auth sign-in without a client secret | 8 |
@@ -147,4 +147,4 @@ CodeQL default setup is switched on once `main` has code: phase 1 checks it afte
 | Secrets | AI-200 LP8 M1 (19835) |
 | Responsible AI, guardrails | AI-103 (128), Module 6 (2985, 3131) |
 
-Well-Architected, applied without raising cost: Reliability RE:01, RE:02, RE:03, RE:04, RE:07, RE:09, RE:10; Security SE:02, SE:04, SE:05, SE:06, SE:08, SE:09, SE:12; Cost CO:02, CO:03, CO:04, CO:07, CO:08, CO:09, CO:10, CO:12; Operational excellence OE:03, OE:04, OE:05, OE:06, OE:07, OE:08, OE:11; Performance PE:01, PE:06, PE:07. Trade-offs that raise cost or depart from guidance live in ADRs 001 to 015.
+Well-Architected, applied without raising cost: Reliability RE:01, RE:02, RE:03, RE:04, RE:07, RE:09, RE:10; Security SE:02, SE:04, SE:05, SE:06, SE:08, SE:09, SE:12; Cost CO:02, CO:03, CO:04, CO:07, CO:08, CO:09, CO:10, CO:12; Operational excellence OE:03, OE:04, OE:05, OE:06, OE:07, OE:08, OE:11; Performance PE:01, PE:06, PE:07. Trade-offs that raise cost or depart from guidance live in ADRs 001 to 016.

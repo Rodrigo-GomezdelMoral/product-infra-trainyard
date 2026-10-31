@@ -18,6 +18,8 @@ The common product skeleton has nine phases, with `eval` as phase 3, and a singl
 
 **Option 3.** Phase 3 is `feature/training`, so the skeleton's `eval` becomes phase 4.
 
+**Budgets, set by the owner in phase 5 (2026-10-31).** `eval/` and `load/` count as application Python with `app/` (1,150 lines), as in the other products, and the test limit is 850 lines for `tests/` only: the pipeline, the scoring script and the promotion workflow with its lease, which REQ-02, REQ-03 and REQ-05 need, add test surface that the reference product, with 700, does not have.
+
 ### What `ml/` holds
 
 Ten files, which is the folder's whole budget:
