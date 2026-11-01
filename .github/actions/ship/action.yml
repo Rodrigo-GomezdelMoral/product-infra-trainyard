@@ -30,13 +30,11 @@ runs:
     - name: Read the endpoint's live and mirrored traffic, so that the deployment never moves them
       shell: bash
       run: |
-        outputs="$(az deployment group show -g "$RG" -n trainyard --query properties.outputs -o json 2>/dev/null || echo '{}')"
-        workspace="$(jq -r '.workspace.value // ""' <<<"$outputs")"
-        endpoint="$(jq -r '.endpoint.value // ""' <<<"$outputs")"
-        live='{}'
-        if [ -n "$endpoint" ]; then
-          live="$(az resource show -g "$RG" -n "$workspace/onlineEndpoints/$endpoint" -o json \
-            --resource-type Microsoft.MachineLearningServices/workspaces/onlineEndpoints --query properties)"
+        short="$([ "$ENVIRONMENT" = production ] && echo prod || echo stg)"
+        if ! live="$(az resource show -g "$RG" -n "mlw-trainyard-$short-swc/onlineEndpoints/ep-trainyard-$short" -o json \
+          --resource-type Microsoft.MachineLearningServices/workspaces/onlineEndpoints --query properties 2>"$RUNNER_TEMP/endpoint.err")"; then
+          grep -q ResourceNotFound "$RUNNER_TEMP/endpoint.err" || { cat "$RUNNER_TEMP/endpoint.err"; exit 1; }
+          live='{}'
         fi
         echo "ENDPOINT_TRAFFIC=$(jq -c '.traffic // {}' <<<"$live")" >> "$GITHUB_ENV"
         echo "ENDPOINT_MIRROR_TRAFFIC=$(jq -c '.mirrorTraffic // {}' <<<"$live")" >> "$GITHUB_ENV"
@@ -45,8 +43,11 @@ runs:
       shell: bash
       run: |
         az deployment group what-if -g "$RG" -n trainyard -p infra/main.bicepparam --result-format ResourceIdOnly --only-show-errors
-        az deployment group create -g "$RG" -n trainyard -p infra/main.bicepparam --only-show-errors \
-          --query properties.outputs -o json > "$RUNNER_TEMP/outputs.json"
+        deploy() {
+          az deployment group create -g "$RG" -n trainyard -p infra/main.bicepparam --only-show-errors \
+            --query properties.outputs -o json > "$RUNNER_TEMP/outputs.json"
+        }
+        deploy || { echo "::warning::Deployment failed; one retry in 10 minutes, the time Learn gives a new role assignment to take effect"; sleep 600; deploy; }
         identity="$(jq -r .amlIdentityClientId.value "$RUNNER_TEMP/outputs.json")"
         echo "::add-mask::$identity"
         echo "APP=$(jq -r .app.value "$RUNNER_TEMP/outputs.json")" >> "$GITHUB_ENV"

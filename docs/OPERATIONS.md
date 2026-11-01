@@ -20,10 +20,11 @@ Each environment has its own identities, workspace, storage, Key Vault, Applicat
 - **Switch.** `deploy.yml` runs only when the repository variable `DEPLOY_STAGING` is `true`. Phase 8 sets it once the sign-in app registration exists, so that no merge creates billed resources before the owner has seen the price.
 - **One image per commit.** `deploy.yml` builds the image once, tagged `YYYYMMDD-main-<sha>`, and deploys it by digest. A re-run or a feed operation on the same commit reuses that image. The digest is recorded on the commit as the status `staging-image`.
 - **Every deployment** (`.github/actions/ship`):
-  1. reads the endpoint's live and mirrored traffic;
-  2. runs `what-if`, then deploys `infra/main.bicep` with that traffic unchanged;
+  1. reads the endpoint's live and mirrored traffic, by the endpoint's name: a failed deployment has no outputs, and an empty traffic would send no request to any deployment; only a missing endpoint reads as empty, and any other error stops the run;
+  2. runs `what-if`, then deploys `infra/main.bicep` with that traffic unchanged, and retries a failed deployment once after 10 minutes, Learn's bound for a new role assignment to take effect (ADR-006);
   3. checks `/healthz`;
   4. registers the four ML components with the image's version (the release tag in production).
+- **The owner's identity scripts** live outside the repository and run once, in order: `00-github.sh` and `01-azure.sh` (setup); `02-shared-access.sh` (deployments and monitoring links in the shared group); `03-login.sh <env>` (the sign-in app registration, run again after the first deployment to register the callback URL); `04-staging-access.sh` (Monitoring Reader in the conditions, and `DEPLOY_STAGING`); `05-registry-link.sh` (`registries/read` and `/write` on the shared registry, which ARM checks at every PUT of a workspace that links it, ADR-007). The CI principals' roles and conditions change only through these scripts; the workflows create only the role assignments the Bicep declares, within those conditions.
 - **Production** takes the digest that staging runs for the tag's commit. It is refused unless that commit has successful `load-test/normal`, `load-test/peak` and `load-test/endurance` statuses (REQ-07, REQ-08).
 - **Fleet feed operations** (ADR-012) are `workflow_dispatch` inputs of `deploy.yml` and `release.yml`: `feed_days` (days from 2025-11-01) and `firmware_b_from` (the drift scenario). Each one registers a new `fleet-feed` version, logged in the Actions history. Never from a laptop.
 - **Urgent patches** go through a `fix/` branch, the same CI and a patch release. They are pre-approved: the owner's approval of the production environment is the change approval.
