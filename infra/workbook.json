@@ -17,7 +17,7 @@
   {
     "title": "KPI-1 model cycle time, minutes (target 120)",
     "days": 90,
-    "query": "AppEvents | where Name == \"retrain_completed\" | summarize cycles = count(), median_minutes = percentile(todouble(Properties.duration_minutes), 50), worst_minutes = max(todouble(Properties.duration_minutes)) | extend target = 120"
+    "query": "AppEvents | where Name == \"retrain_completed\" | summarize arg_max(TimeGenerated, *) by job = tostring(Properties.pipeline_job) | summarize runs = count(), median_minutes = percentile(todouble(Properties.duration_minutes), 50), worst_minutes = max(todouble(Properties.duration_minutes)) | extend target = 120"
   },
   {
     "title": "KPI-2 drift-to-production lead time, hours (target 24)",
@@ -27,7 +27,7 @@
   {
     "title": "KPI-3 predictive quality at 7 days on the latest matured window (recall 0.80 at precision 0.60)",
     "days": 90,
-    "query": "AppEvents | where Name == \"model_evaluated\" | top 1 by TimeGenerated | project TimeGenerated, pipeline_job = tostring(Properties.pipeline_job), recall_7d = todouble(Properties.recall_7d), precision_7d = todouble(Properties.precision_7d), recall_target = 0.8, precision_target = 0.6"
+    "query": "AppEvents | where Name == \"model_evaluated\" | extend pipeline_job = tostring(Properties.pipeline_job) | top 1 by pipeline_job desc | project TimeGenerated, pipeline_job, recall_7d = todouble(Properties.recall_7d), precision_7d = todouble(Properties.precision_7d), recall_target = 0.8, precision_target = 0.6"
   },
   {
     "title": "KPI-4 promotion failure rate, 90 days, % (target 15)",
@@ -42,7 +42,7 @@
   {
     "title": "Health model, last 24 hours: inference, chat, pipeline, drift",
     "days": 1,
-    "query": "union (AmlOnlineEndpointTrafficLog | summarize n = count(), bad = countif(toint(ResponseCode) >= 500 or toint(ResponseCode) in (408, 429)), p95 = percentile(TotalDurationMs, 95) | extend component = \"inference\", state = case(n == 0, \"no traffic\", bad > 0.005 * n, \"down\", bad > 0.003 * n or p95 >= 400, \"degraded\", \"healthy\")), (AppRequests | where Name has \"/api/chat\" | summarize n = count(), bad = countif(toint(ResultCode) >= 500) | extend component = \"chat\", state = case(n == 0, \"no traffic\", bad > 0.05 * n, \"down\", bad > 0.01 * n, \"degraded\", \"healthy\")), (AmlRunStatusChangedEvent | where Status in (\"Completed\", \"Failed\") and ExperimentName == \"trainyard-training\" | summarize n = count(), bad = countif(Status == \"Failed\") | extend component = \"pipeline\", state = case(n == 0, \"no runs\", bad == n, \"down\", bad > 0, \"degraded\", \"healthy\")), (AmlRunStatusChangedEvent | where Status in (\"Completed\", \"Failed\") and ExperimentName != \"trainyard-training\" | summarize n = count(), bad = countif(Status == \"Failed\") | extend component = \"drift\", state = case(n == 0, \"no runs\", bad > 0, \"breached\", \"healthy\")) | project component, state, n, bad"
+    "query": "union (AmlOnlineEndpointTrafficLog | summarize n = count(), bad = countif(toint(ResponseCode) >= 500 or toint(ResponseCode) in (408, 429)), p95 = percentile(TotalDurationMs, 95) | extend component = \"inference\", state = case(n == 0, \"no traffic\", bad > 0.005 * n, \"down\", bad > 0.003 * n or p95 >= 400, \"degraded\", \"healthy\")), (AppRequests | where Name has \"/api/chat\" | summarize n = count(), bad = countif(toint(ResultCode) >= 500) | extend component = \"chat\", state = case(n == 0, \"no traffic\", bad > 0.05 * n, \"down\", bad > 0.01 * n, \"degraded\", \"healthy\")), (AmlRunStatusChangedEvent | where Status in (\"Completed\", \"Failed\") and RootRunId startswith \"training-\" | summarize n = count(), bad = countif(Status == \"Failed\") | extend component = \"pipeline\", state = case(n == 0, \"no runs\", bad == n, \"down\", bad > 0, \"degraded\", \"healthy\")), (AmlRunStatusChangedEvent | where Status in (\"Completed\", \"Failed\") and RootRunId startswith \"trainyard-monitor-\" | summarize n = count(), bad = countif(Status == \"Failed\") | extend component = \"drift\", state = case(n == 0, \"no runs\", bad > 0, \"breached\", \"healthy\")) | project component, state, n, bad"
   },
   {
     "title": "Monitor and pipeline runs (REQ-04)",

@@ -79,7 +79,7 @@ def submit(client: MLClient, endpoint: str, version: str, identity: str) -> dict
         "pipeline_job": str(created.name),
         "data_asset": FEED,
         "data_version": str(feed.version),
-        "status": str(created.status),
+        "status": str(getattr(created.status, "value", created.status)),
     }
 
 

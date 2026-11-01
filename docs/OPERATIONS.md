@@ -1,6 +1,6 @@
 # Operations
 
-How Trainyard is run, changed, recovered and paid for. State on 2026-10-31: the infrastructure and the workflows are written and validated with `what-if` in both groups; nothing is deployed yet. Phase 8 fills in every measured figure below, with its date, window and number of cases.
+How Trainyard is run, changed, recovered and paid for. State on 2026-11-01: staging is deployed and serves a model; production is not deployed yet. Every measured figure below carries its date, window and number of cases.
 
 ## Environments
 
@@ -27,7 +27,7 @@ Each environment has its own identities, workspace, storage, Key Vault, Applicat
   4. registers the four ML components with the image's version (the release tag in production).
 - **The owner's identity scripts** live outside the repository and run once, in order: `00-github.sh` and `01-azure.sh` (setup); `02-shared-access.sh` (deployments and monitoring links in the shared group); `03-login.sh <env>` (the sign-in app registration, run again after the first deployment to register the callback URL); `04-staging-access.sh` (Monitoring Reader in the conditions, and `DEPLOY_STAGING`); `05-registry-link.sh` (`registries/read` and `/write` on the shared registry, which ARM checks at every PUT of a workspace that links it, ADR-007); `06-endpoint-providers.sh` (registers `Microsoft.PolicyInsights` and `Microsoft.Cdn`, and deletes the staging endpoint only if its creation failed). The CI principals' roles and conditions change only through these scripts; the workflows create only the role assignments the Bicep declares, within those conditions.
 - **Production** takes the digest that staging runs for the tag's commit. It is refused unless that commit has successful `load-test/normal`, `load-test/peak` and `load-test/endurance` statuses (REQ-07, REQ-08).
-- **Fleet feed operations** (ADR-012) are `workflow_dispatch` inputs of `deploy.yml` and `release.yml`: `feed_days` (days from 2025-11-01) and `firmware_b_from` (the drift scenario). Each one registers a new `fleet-feed` version, logged in the Actions history. Never from a laptop.
+- **Fleet feed operations** (ADR-012) are `workflow_dispatch` inputs of `deploy.yml` and `release.yml`: `feed_days` (days from 2025-11-01) and `firmware_b_from` (the drift scenario). Each one registers a new `fleet-feed` version, logged in the Actions history. Never from a laptop. The staging drift scenario uses `feed_days=365` and `firmware_b_from=2026-05-01`, run on 2026-11-01. A local rehearsal with the same code chose that date: with the shift from May, a retrained model keeps recall 0.90 and Series B recall 0.71 on the new holdout while the current model drops to 0.84 and 0.14, so the gate registers the challenger and the comparison favours it; with the shift from August, too little of it reaches the training window and the challenger fails the gate on Series B (0.14).
 - **Urgent patches** go through a `fix/` branch, the same CI and a patch release. They are pre-approved: the owner's approval of the production environment is the change approval.
 
 ## Model promotion and rollback
@@ -71,7 +71,18 @@ Azure ML accepts no update to an endpoint whose creation failed ("Please recreat
 
 ## Backup and restore
 
-- **Cosmos DB:** continuous backup, 7-day tier, which bills no backup storage. Restore to a new account at a point in time, then point `COSMOS_ENDPOINT` at it. The drill runs in staging in phase 8 and measures RTO (target 4 h) and RPO (target 24 h).
+- **Cosmos DB:** continuous backup, 7-day tier, which bills no backup storage. Restore to a new account at a point in time, give the app identity its data role there (data-plane role assignments are not restored), then point `COSMOS_ENDPOINT` at it.
+- **Drill, staging, 2026-11-01** (Azure activity log and Application Insights timestamps, one drill):
+
+  | Step | Started (UTC) | Took |
+  |---|---|---|
+  | Point-in-time restore of `cosmos-trainyard-stg-swc` to `cosmos-trainyard-stg-drill`, restore point 11:36:56 | 11:39:51 | 10 min 19 s |
+  | `07-restore-drill.sh`: Cosmos DB Built-in Data Contributor for `id-trainyard-app-stg` on the restored account | 12:02:18 | under 1 min |
+  | `COSMOS_ENDPOINT` set on the Container App (new revision); first read from the restored account: the promotion lease, `GET .../checkpoints/docs/promotion` 200, then the timer's lease writes | 12:33:24 | 1 min 36 s |
+  | `COSMOS_ENDPOINT` set back to the staging account; the drill account deleted | 12:38:21 | |
+
+  **RTO:** 13 minutes of work (restore, role, switch), 55 minutes of wall clock from the restore request to the first read, because the owner ran the role script in between; target 4 h. **RPO:** the restore point is chosen to the second within the 7-day window; the restored account held the documents written before 11:36:56, including the promotion lease; target 24 h.
+  **What the drill taught:** the app reports finished training runs once, using a marker kept in the lease document. A restored lease has an older marker, so the app sends `retrain_completed` and `model_evaluated` again for runs it had already reported. The workbook's KPI-1 tile counts each pipeline job once, and every KQL in this document does the same.
 - **Models and data assets** are immutable versions in each workspace. Storage has blob and container soft delete for 7 days.
 - **The workspace** is rebuilt from the Bicep and retrained from its data assets.
 
@@ -88,7 +99,11 @@ Container Apps, the workspace, Cosmos DB serverless and serverless compute cost 
 
 ## Cost per environment
 
-The estimate is in `docs/cost.md`: about USD 52 a month at rest in staging and USD 61 in production, mostly the endpoint. Phase 8 compares it with Cost Management, per resource group.
+Azure Advisor, 2026-11-01: one recommendation on Trainyard resources, zone redundancy for `sttrainyardstgswc` (High availability). Not applied: it raises the storage price, and the workspace storage holds only rebuildable data (component code, the synthetic feed, models retrained from it, collected inputs). Like the single endpoint instance (ADR-005), no zone redundancy is a Reliability trade-off for cost: recovery is the rebuild from Bicep and the retraining described under *Backup and restore*.
+
+The CI principal calls `/api/fleet/risk` with its own token, so it needs an app role: the sign-in app registration's `Reader` role allows applications and is granted to the staging CI principal, with version 2 access tokens (`08-load-test-reader.sh`, Learn: daemon client applications). `ModelApprover` stays users only. Load tests add their rows to the deployment's collected inputs, so they never run in the day before a monitor run that is meant to read real traffic.
+
+Results: pending, phase 8.: about USD 52 a month at rest in staging and USD 61 in production, mostly the endpoint. Phase 8 compares it with Cost Management, per resource group.
 
 ## Load tests
 
@@ -101,6 +116,8 @@ The estimate is in `docs/cost.md`: about USD 52 a month at rest in staging and U
 | stress | ramp of 1 user a second up to 300 | until errors exceed 1 % or p95 exceeds 500 ms | none: it finds the breaking point |
 | endurance | 10 | 30 min | REQ-07 and REQ-08 |
 | chat | 2 | 2 min | none: it measures the time to first event |
+
+The CI principal calls `/api/fleet/risk` with its own token, so it needs an app role: the sign-in app registration's `Reader` role allows applications and is granted to the staging CI principal, with version 2 access tokens (`08-load-test-reader.sh`, Learn: daemon client applications). `ModelApprover` stays users only. Load tests add their rows to the deployment's collected inputs, so they never run in the day before a monitor run that is meant to read real traffic.
 
 Results: pending, phase 8. Each run's p50, p95, p99, requests per second, errors, peak endpoint CPU and memory, and app replicas go to its job summary and here, with the date.
 
