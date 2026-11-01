@@ -66,8 +66,7 @@ resource environment 'Microsoft.App/managedEnvironments@2026-07-01' = {
   location: location
   tags: tags
   properties: {
-    appLogsConfiguration: { destination: 'azure-monitor' }, workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }]
-    zoneRedundant: false
+    appLogsConfiguration: { destination: 'azure-monitor' }, workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }], zoneRedundant: false
   }
 }
 
@@ -84,8 +83,7 @@ resource app 'Microsoft.App/containerApps@2026-07-01' = {
   tags: tags
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${identity.id}': {} } }
   properties: {
-    environmentId: environment.id
-    workloadProfileName: 'Consumption'
+    environmentId: environment.id, workloadProfileName: 'Consumption'
     configuration: {
       activeRevisionsMode: 'Single'
       ingress: { external: true, targetPort: 8000, transport: 'auto', allowInsecure: false }

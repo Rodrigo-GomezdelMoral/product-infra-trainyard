@@ -10,6 +10,8 @@ var roles = {
   metricsPublisher: '3913510d-42f4-4e42-8a64-420c390055eb'
   identityOperator: 'f1a07417-d97a-45cb-824c-7a7467783830'
   monitoringReader: '43d0d8ad-25c7-4714-9337-8ba259a9fe05'
+  aiAdministrator: 'b78c5d69-af96-48a3-bf8d-a8b4d589de94'
+  vaultAdministrator: '00482a5a-887f-4fb3-b363-3b7fe8e74483'
   cosmosDataContributor: '00000000-0000-0000-0000-000000000002'
 }
 

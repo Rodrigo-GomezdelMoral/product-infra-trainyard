@@ -16,11 +16,9 @@ param traffic object
 param mirrorTraffic object
 
 var allLogs = { workspaceId: logAnalyticsId, logs: [{ categoryGroup: 'allLogs', enabled: true }] }
-var workspaceGrants = [app, aml]
 var storageGrants = [
-  { identity: app, role: roles.blobReader }
-  { identity: aml, role: roles.blobContributor }
-  { identity: ep, role: roles.blobContributor }
+  { identity: app, role: roles.blobReader }, { identity: ep, role: roles.blobContributor }
+  { identity: aml, role: roles.blobContributor }, { identity: aml, role: roles.aiAdministrator }
 ]
 
 resource storage 'Microsoft.Storage/storageAccounts@2026-06-01' = {
@@ -59,6 +57,22 @@ resource insights 'Microsoft.Insights/components@2020-02-02' = {
   properties: { Application_Type: 'web', WorkspaceResourceId: logAnalyticsId, IngestionMode: 'LogAnalytics', DisableLocalAuth: true }
 }
 
+resource vaultAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
+  for role in [roles.aiAdministrator, roles.vaultAdministrator]: {
+    name: guid(vault.id, aml.id, role)
+    scope: vault
+    properties: { roleDefinitionId: roleId(role), principalId: aml.principalId, principalType: 'ServicePrincipal' }
+  }
+]
+
+resource insightsAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
+  for grant in [{ identity: app, role: roles.metricsPublisher }, { identity: aml, role: roles.aiAdministrator }]: {
+    name: guid(insights.id, grant.identity.id, grant.role)
+    scope: insights
+    properties: { roleDefinitionId: roleId(grant.role), principalId: grant.identity.principalId, principalType: 'ServicePrincipal' }
+  }
+]
+
 #disable-next-line BCP081
 resource workspace 'Microsoft.MachineLearningServices/workspaces@2026-09-01' = {
   name: 'mlw-trainyard-${short}-swc'
@@ -70,13 +84,14 @@ resource workspace 'Microsoft.MachineLearningServices/workspaces@2026-09-01' = {
     containerRegistry: registryId, primaryUserAssignedIdentity: aml.id, systemDatastoresAuthMode: 'identity', enableDataIsolation: true
     publicNetworkAccess: 'Enabled', hbiWorkspace: false, v1LegacyMode: false
   }
+  dependsOn: [storageAccess, vaultAccess, insightsAccess]
 }
 
 resource workspaceAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
-  for grant in workspaceGrants: {
-    name: guid(workspace.id, grant.id, roles.dataScientist)
+  for grant in [{ identity: app, role: roles.dataScientist }, { identity: aml, role: roles.aiAdministrator }]: {
+    name: guid(workspace.id, grant.identity.id, grant.role)
     scope: workspace
-    properties: { roleDefinitionId: roleId(roles.dataScientist), principalId: grant.principalId, principalType: 'ServicePrincipal' }
+    properties: { roleDefinitionId: roleId(grant.role), principalId: grant.identity.principalId, principalType: 'ServicePrincipal' }
   }
 ]
 
@@ -92,12 +107,6 @@ resource deployerAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storage.id, deployer().objectId, roles.blobContributor)
   scope: storage
   properties: { roleDefinitionId: roleId(roles.blobContributor), principalId: deployer().objectId }
-}
-
-resource publisher 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(insights.id, app.id, roles.metricsPublisher)
-  scope: insights
-  properties: { roleDefinitionId: roleId(roles.metricsPublisher), principalId: app.principalId, principalType: 'ServicePrincipal' }
 }
 
 #disable-next-line BCP081
