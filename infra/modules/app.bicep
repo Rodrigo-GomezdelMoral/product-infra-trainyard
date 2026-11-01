@@ -38,13 +38,14 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2026-03-15' = {
 
 resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2026-03-15' = { parent: cosmos, name: 'trainyard', properties: { resource: { id: 'trainyard' } } }
 
+// defaultTtl is left out, not null, when a container has none: Cosmos DB refused "defaultTtl": null with BadRequest (phase 8).
 resource collections 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2026-03-15' = [
   for item in items(containers): {
     parent: database
     name: item.key
     properties: {
       resource: {
-        id: item.key, partitionKey: { paths: [item.value.key], kind: 'Hash' }, defaultTtl: item.value.?ttl
+        id: item.key, partitionKey: { paths: [item.value.key], kind: 'Hash' }, ...(contains(item.value, 'ttl') ? { defaultTtl: item.value.?ttl } : {})
         indexingPolicy: { indexingMode: 'consistent', includedPaths: map(item.value.paths, path => { path: path }), excludedPaths: [{ path: '/*' }] }
       }
     }

@@ -47,7 +47,7 @@
   {
     "title": "Monitor and pipeline runs (REQ-04)",
     "days": 30,
-    "query": "AmlRunStatusChangedEvent | where Status in (\"Completed\", \"Failed\", \"Canceled\") | project TimeGenerated, ExperimentName, RunId, Status | order by TimeGenerated desc | take 50"
+    "query": "AmlRunStatusChangedEvent | where Status in (\"Completed\", \"Failed\", \"Canceled\") | project TimeGenerated, RootRunId, RunId, Status | order by TimeGenerated desc | take 50"
   },
   {
     "title": "Unit cost, USD: estimates from docs/cost.md; Cost Management holds the actuals",
