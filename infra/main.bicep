@@ -60,7 +60,8 @@ resource routeAsEp 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 module sharedAccess 'modules/shared.bicep' = {
   scope: shared
   params: {
-    app: appRef, pulls: [appRef, amlRef, epRef], registryName: registryName, foundryName: foundryName, projectName: projectName
+    app: appRef, registryName: registryName, foundryName: foundryName, projectName: projectName
+    grants: concat(map([appRef, amlRef, epRef], ref => { identity: ref, role: roles.acrPull }), [{ identity: amlRef, role: roles.aiAdministrator }])
   }
 }
 
