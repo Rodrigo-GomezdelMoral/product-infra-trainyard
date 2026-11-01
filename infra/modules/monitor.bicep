@@ -76,7 +76,7 @@ resource runFailures 'Microsoft.Insights/scheduledQueryRules@2026-03-01' = {
       allOf: [
         {
           query: 'AmlRunStatusChangedEvent | where Status == "Failed"', timeAggregation: 'Count', operator: 'GreaterThan', threshold: 0
-          dimensions: [{ name: 'ExperimentName', operator: 'Include', values: ['*'] }], failingPeriods: { numberOfEvaluationPeriods: 1, minFailingPeriodsToAlert: 1 }
+          dimensions: [{ name: 'RootRunId', operator: 'Include', values: ['*'] }], failingPeriods: { numberOfEvaluationPeriods: 1, minFailingPeriodsToAlert: 1 }
         }
       ]
     }
