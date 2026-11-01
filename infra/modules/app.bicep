@@ -1,6 +1,8 @@
 import { roles } from 'roles.bicep'
 
 param location string
+@description('Region of the Container Apps environment and app; Cosmos DB stays in location (ADR-017).')
+param appLocation string
 param tags object
 param short string
 param maxReplicas int
@@ -14,6 +16,7 @@ param identity { id: string, principalId: string }
 @description('Environment variables of the container.')
 param settings object
 
+var regionCodes = { swedencentral: 'swc', germanywestcentral: 'gwc' }
 var issuer = '${az.environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
 var containers = {
   checkpoints: { key: '/workflow_name', paths: ['/workflow_name/?', '/checkpoint_id/?', '/timestamp/?'] }
@@ -33,11 +36,7 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2026-03-15' = {
   }
 }
 
-resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2026-03-15' = {
-  parent: cosmos
-  name: 'trainyard'
-  properties: { resource: { id: 'trainyard' } }
-}
+resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2026-03-15' = { parent: cosmos, name: 'trainyard', properties: { resource: { id: 'trainyard' } } }
 
 resource collections 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2026-03-15' = [
   for item in items(containers): {
@@ -62,12 +61,10 @@ resource cosmosAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@
 }
 
 resource environment 'Microsoft.App/managedEnvironments@2026-07-01' = {
-  name: 'cae-trainyard-${short}-swc'
-  location: location
+  name: 'cae-trainyard-${short}-${regionCodes[appLocation]}'
+  location: appLocation
   tags: tags
-  properties: {
-    appLogsConfiguration: { destination: 'azure-monitor' }, workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }], zoneRedundant: false
-  }
+  properties: { appLogsConfiguration: { destination: 'azure-monitor' }, workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }], zoneRedundant: false }
 }
 
 #disable-next-line use-recent-api-versions
@@ -79,7 +76,7 @@ resource environmentLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-previ
 
 resource app 'Microsoft.App/containerApps@2026-07-01' = {
   name: 'ca-trainyard-${short}'
-  location: location
+  location: appLocation
   tags: tags
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${identity.id}': {} } }
   properties: {

@@ -36,6 +36,9 @@ runs:
           grep -q ResourceNotFound "$RUNNER_TEMP/endpoint.err" || { cat "$RUNNER_TEMP/endpoint.err"; exit 1; }
           live='{}'
         fi
+        if jq -e '.provisioningState == "Failed" and (.traffic // {}) == {} and (.mirrorTraffic // {}) == {}' <<<"$live" >/dev/null; then
+          echo "::error::The endpoint's creation failed and Azure ML accepts no update to it: see 'A failed endpoint' in docs/OPERATIONS.md"; exit 1
+        fi
         echo "ENDPOINT_TRAFFIC=$(jq -c '.traffic // {}' <<<"$live")" >> "$GITHUB_ENV"
         echo "ENDPOINT_MIRROR_TRAFFIC=$(jq -c '.mirrorTraffic // {}' <<<"$live")" >> "$GITHUB_ENV"
 

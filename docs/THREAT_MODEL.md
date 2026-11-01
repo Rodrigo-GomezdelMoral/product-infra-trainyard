@@ -28,6 +28,7 @@ A light STRIDE pass over Trainyard as deployed by `infra/main.bicep`. Each mitig
 ## Residual risks, accepted
 
 - **First deployment window.** Azure creates the Container App before its `authConfigs` child, so for seconds on the very first deployment the app is reachable without Easy Auth. With no session it has no data, the image is not yet serving users, and the window never recurs.
+- **Two regions.** The app runs in Germany West Central and its data stays in Sweden Central (ADR-017): conversations and scores cross between them over TLS 1.2 on the Microsoft backbone, with the same Entra ID checks at every hop, and nothing is kept at rest in Germany West Central.
 - **No private networking.** Public endpoints with Entra ID and TLS 1.2, no private endpoints or managed virtual network. They would add cost, and model monitoring does not support approved-outbound-only isolation (Guidance map, Security).
 - **Shared base.** The registry, Foundry, Log Analytics and the action group are shared with other products; Trainyard only adds role assignments there (ADR-007).
 - **One instance.** Availability rests on the platform replacing an unhealthy instance (ADR-005).

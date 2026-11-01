@@ -10,7 +10,7 @@ An estimate, not a measurement: Sweden Central, USD, Azure Retail Prices API on 
 | Model monitor, daily, serverless Spark at USD 0.142 per vCore-hour (estimate: 2 × `standard_e4s_v3` nodes, 15 minutes) | 0 (on demand) | about 8.5 |
 | Storage, Key Vault, Cosmos DB storage, the log alert (USD 0.50 at 15 minutes), ingestion under the free 5 GB | about 2 | about 3 |
 | **At rest** | **about 52** | **about 61** |
-| In use: training runs (`Standard_F2s_v2` at USD 0.097 an hour, about 30 minutes each), the chat (`gpt-5-mini`, USD 0.25 and 2.00 per million input and output tokens), the second deployment during a promotion (about USD 1.6 a day), Container Apps beyond the free grant | about 4 | about 4 |
+| In use: training runs (`Standard_F2s_v2` at USD 0.097 an hour, about 30 minutes each), the chat (`gpt-5-mini`, USD 0.25 and 2.00 per million input and output tokens), the second deployment during a promotion (about USD 1.6 a day), Container Apps beyond the free grant (Germany West Central, ADR-017, at Sweden Central's prices; inter-region transfer USD 0.02 per GB) | about 4 | about 4 |
 | **In use** | **about 56** | **about 65** |
 | Budget in Bicep (alerts at 80 % actual and 100 % forecast) | 60 | 80 |
 

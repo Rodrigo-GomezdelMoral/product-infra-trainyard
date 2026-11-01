@@ -127,5 +127,5 @@ The SLA applies to the inference endpoint, which is always on. The chat applicat
 
 - **Telemetry is synthetic equipment data:** 10-minute aggregates per unit of the MetroPT-3 analogue and digital signals, from a seeded degradation process in which air leaks and valve wear raise the compressor's duty cycle and slow pressure recovery in the days before a failure.
 - **Conversations** hold only the user's object id and their text. They expire after 30 days and can be deleted at any time (REQ-10).
-- **Residency:** data at rest stays in Sweden Central. Prompts to the language model, a Global Standard deployment, may be processed in any Azure region; this is acceptable because they carry no personal data.
+- **Residency:** data at rest stays in Sweden Central; the app that serves the chat runs in Germany West Central and keeps nothing at rest (ADR-017). Prompts to the language model, a Global Standard deployment, may be processed in any Azure region; this is acceptable because they carry no personal data.
 - **Scope of use:** Trainyard prioritises inspections. It never replaces mandated maintenance or any safety decision.
