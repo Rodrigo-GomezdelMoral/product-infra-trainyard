@@ -230,15 +230,8 @@ h3 {
 }
 
 .avatar {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
   flex: none;
-  background: var(--light);
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 600;
+  color: var(--muted);
 }
 
 main {
@@ -299,6 +292,10 @@ main {
   align-items: center;
   margin: 4px 0;
   color: var(--muted);
+}
+
+.thread > .status {
+  margin-inline: auto;
 }
 
 .status.error {
