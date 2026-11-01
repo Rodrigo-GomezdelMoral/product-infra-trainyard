@@ -1,7 +1,7 @@
 import "@fontsource/inter/latin-400.css";
 import "@fontsource/inter/latin-600.css";
 import "./styles.css";
-import { ArrowUp, Check, Copy, FileText, LoaderCircle, LogOut, Menu, MessageSquare, Search, SquarePen, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
+import { ArrowUp, Check, CircleUserRound, Copy, FileText, LoaderCircle, LogOut, Menu, MessageSquare, Search, SquarePen, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import Markdown from "react-markdown";
@@ -149,7 +149,6 @@ function App() {
   const items = DEMO
     ? RUNS.map((run) => ({ key: run.title, label: run.title, go: () => play(run), drop: undefined }))
     : conversations.map((item) => ({ key: item.id, label: item.title || "Untitled conversation", go: () => open(item), drop: () => forget(item) }));
-  const initial = (user.name || "?").charAt(0).toUpperCase();
 
   return (
     <div className="app">
@@ -192,9 +191,7 @@ function App() {
             {items.length === 0 && <p className="status">{DEMO ? "No recorded runs yet." : "No conversations yet."}</p>}
           </nav>
           <div className="me">
-            <span className="avatar" aria-hidden>
-              {initial}
-            </span>
+            <CircleUserRound className="avatar" size={28} strokeWidth={1.5} aria-hidden />
             <span>
               {user.name || "Signed out"}
               <small>{owner ? "Model owner" : user.roles.length ? "Maintenance planner" : DEMO ? "Demo" : "No Trainyard role"}</small>
@@ -224,9 +221,7 @@ function App() {
               {entries.map((entry, index) =>
                 entry.kind === "user" ? (
                   <div className="turn user" key={index}>
-                    <span className="avatar" aria-hidden>
-                      {initial}
-                    </span>
+                    <CircleUserRound className="avatar" size={28} strokeWidth={1.5} aria-hidden />
                     <p>{entry.text}</p>
                   </div>
                 ) : (
