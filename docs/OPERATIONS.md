@@ -8,23 +8,24 @@ How Trainyard is run, changed, recovered and paid for. State on 2026-10-31: the 
 |---|---|---|
 | Resource group | `rg-trainyard-stg-swc` | `rg-trainyard-prod-swc` |
 | Deploys | every merge to `main` (`deploy.yml`), once `DEPLOY_STAGING` is `true` | a published `v*` release (`release.yml`), after the owner's approval |
+| Container Apps environment | `cae-trainyard-stg-gwc`, Germany West Central | `cae-trainyard-prod-gwc`, Germany West Central |
 | Container App | `ca-trainyard-stg`, 0 to 2 replicas | `ca-trainyard-prod`, 0 to 3 replicas |
 | Endpoint | `ep-trainyard-stg`, 1 × `Standard_DS1_v2` while a deployment exists | `ep-trainyard-prod`, the same |
 | Monitor | on demand | daily at 03:15 UTC |
 | Budget | USD 60, alerts at 80 % actual and 100 % forecast | USD 80, the same |
 
-Each environment has its own identities, workspace, storage, Key Vault, Application Insights, Cosmos DB and Container Apps environment. The shared base (registry, Foundry, Log Analytics, action group) belongs to the landing zone.
+Each environment has its own identities, workspace, storage, Key Vault, Application Insights, Cosmos DB and Container Apps environment. Everything is in Sweden Central except the Container Apps environment and the app, in Germany West Central. Sweden Central allows one Container Apps environment per subscription, and another product uses it; West Europe refuses new resources from this subscription (ADR-017). Each call from the app to Cosmos DB, the endpoint or the workspace adds a 27 ms round trip. The shared base (registry, Foundry, Log Analytics, action group) belongs to the landing zone.
 
 ## Delivery
 
 - **Switch.** `deploy.yml` runs only when the repository variable `DEPLOY_STAGING` is `true`. Phase 8 sets it once the sign-in app registration exists, so that no merge creates billed resources before the owner has seen the price.
 - **One image per commit.** `deploy.yml` builds the image once, tagged `YYYYMMDD-main-<sha>`, and deploys it by digest. A re-run or a feed operation on the same commit reuses that image. The digest is recorded on the commit as the status `staging-image`.
 - **Every deployment** (`.github/actions/ship`):
-  1. reads the endpoint's live and mirrored traffic, by the endpoint's name: a failed deployment has no outputs, and an empty traffic would send no request to any deployment; only a missing endpoint reads as empty, and any other error stops the run;
+  1. reads the endpoint's live and mirrored traffic, by the endpoint's name: a failed deployment has no outputs, and an empty traffic would send no request to any deployment; only a missing endpoint reads as empty, and any other error stops the run, as does an endpoint whose creation failed (see *A failed endpoint*);
   2. runs `what-if`, then deploys `infra/main.bicep` with that traffic unchanged, and retries a failed deployment once after 10 minutes, Learn's bound for a new role assignment to take effect (ADR-006);
   3. checks `/healthz`;
   4. registers the four ML components with the image's version (the release tag in production).
-- **The owner's identity scripts** live outside the repository and run once, in order: `00-github.sh` and `01-azure.sh` (setup); `02-shared-access.sh` (deployments and monitoring links in the shared group); `03-login.sh <env>` (the sign-in app registration, run again after the first deployment to register the callback URL); `04-staging-access.sh` (Monitoring Reader in the conditions, and `DEPLOY_STAGING`); `05-registry-link.sh` (`registries/read` and `/write` on the shared registry, which ARM checks at every PUT of a workspace that links it, ADR-007). The CI principals' roles and conditions change only through these scripts; the workflows create only the role assignments the Bicep declares, within those conditions.
+- **The owner's identity scripts** live outside the repository and run once, in order: `00-github.sh` and `01-azure.sh` (setup); `02-shared-access.sh` (deployments and monitoring links in the shared group); `03-login.sh <env>` (the sign-in app registration, run again after the first deployment to register the callback URL); `04-staging-access.sh` (Monitoring Reader in the conditions, and `DEPLOY_STAGING`); `05-registry-link.sh` (`registries/read` and `/write` on the shared registry, which ARM checks at every PUT of a workspace that links it, ADR-007); `06-endpoint-providers.sh` (registers `Microsoft.PolicyInsights` and `Microsoft.Cdn`, and deletes the staging endpoint only if its creation failed). The CI principals' roles and conditions change only through these scripts; the workflows create only the role assignments the Bicep declares, within those conditions.
 - **Production** takes the digest that staging runs for the tag's commit. It is refused unless that commit has successful `load-test/normal`, `load-test/peak` and `load-test/endurance` statuses (REQ-07, REQ-08).
 - **Fleet feed operations** (ADR-012) are `workflow_dispatch` inputs of `deploy.yml` and `release.yml`: `feed_days` (days from 2025-11-01) and `firmware_b_from` (the drift scenario). Each one registers a new `fleet-feed` version, logged in the Actions history. Never from a laptop.
 - **Urgent patches** go through a `fix/` branch, the same CI and a patch release. They are pre-approved: the owner's approval of the production environment is the change approval.
@@ -63,6 +64,10 @@ A failed canary rolls itself back; investigate it afterwards from the shadow and
 4. **Recover and record:** fix through a `fix/` branch, and note the incident and its timeline in the pull request.
 
 The owner does every step: there is no on-call rotation for a portfolio product.
+
+### A failed endpoint
+
+Azure ML accepts no update to an endpoint whose creation failed ("Please recreate the endpoint"), so the deployment stops before `what-if`. Fix the cause, delete the endpoint (it has no deployment and no traffic) and run the deployment again: the Bicep recreates it. On the first staging deployment the cause was `SubscriptionNotRegistered`: a managed online endpoint needs `Microsoft.PolicyInsights` and `Microsoft.Cdn` registered in the subscription, which Learn's troubleshooting page does not list. `06-endpoint-providers.sh` registers both and deletes the staging endpoint only in that state. Deleting an endpoint is never automatic, because in production it is the SLA surface.
 
 ## Backup and restore
 
