@@ -26,6 +26,8 @@ param foundryName string
 param projectName string
 param chatModel string
 param location string = resourceGroup().location
+@description('Region of the Container Apps environment and app only; Sweden Central allows one environment per subscription, already used (ADR-017).')
+param appLocation string = 'germanywestcentral'
 param budgetStartDate string = utcNow('yyyy-MM-01')
 
 var production = env == 'production'
@@ -76,7 +78,7 @@ module ml 'modules/ml.bicep' = {
 module app 'modules/app.bicep' = {
   dependsOn: [sharedAccess, submitAsAml, routeAsEp]
   params: {
-    location: location, tags: tags, short: short, maxReplicas: production ? 3 : 2, logAnalyticsId: logAnalyticsId, authClientId: authClientId
+    location: location, appLocation: appLocation, tags: tags, short: short, maxReplicas: production ? 3 : 2, logAnalyticsId: logAnalyticsId, authClientId: authClientId
     image: '${registry.properties.loginServer}/product-infra-trainyard@${digest}', registryServer: registry.properties.loginServer
     identity: appRef
     settings: {
