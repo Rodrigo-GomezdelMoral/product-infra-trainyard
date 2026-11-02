@@ -1,12 +1,13 @@
 import { roles } from 'roles.bicep'
 
 param location string
-@description('Region of the Container Apps environment and app; Cosmos DB stays in location (ADR-017).')
+@description('Region of the app, that of cae-trainyard-env; Cosmos DB stays in location (ADR-017, ADR-018).')
 param appLocation string
 param tags object
 param short string
 param maxReplicas int
-param logAnalyticsId string
+@description('Resource id of cae-trainyard-env, in the production group (ADR-018).')
+param environmentId string
 param image string
 param registryServer string
 @description('Client id of the app registration Easy Auth signs users in with.')
@@ -16,7 +17,6 @@ param identity { id: string, principalId: string }
 @description('Environment variables of the container.')
 param settings object
 
-var regionCodes = { swedencentral: 'swc', germanywestcentral: 'gwc' }
 var issuer = '${az.environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
 var containers = {
   checkpoints: { key: '/workflow_name', paths: ['/workflow_name/?', '/checkpoint_id/?', '/timestamp/?'] }
@@ -24,9 +24,7 @@ var containers = {
 }
 
 resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2026-03-15' = {
-  name: 'cosmos-trainyard-${short}-swc'
-  location: location
-  tags: tags
+  name: 'cosmos-trainyard-${short}-swc', location: location, tags: tags
   kind: 'GlobalDocumentDB'
   properties: {
     databaseAccountOfferType: 'Standard', capabilities: [{ name: 'EnableServerless' }], consistencyPolicy: { defaultConsistencyLevel: 'Session' }
@@ -53,35 +51,18 @@ resource collections 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/contain
 ]
 
 resource cosmosAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2026-03-15' = {
-  parent: cosmos
-  name: guid(cosmos.id, identity.id, roles.cosmosDataContributor)
+  parent: cosmos, name: guid(cosmos.id, identity.id, roles.cosmosDataContributor)
   properties: {
     roleDefinitionId: '${cosmos.id}/sqlRoleDefinitions/${roles.cosmosDataContributor}', principalId: identity.principalId
     scope: '${cosmos.id}/dbs/${database.name}'
   }
 }
 
-resource environment 'Microsoft.App/managedEnvironments@2026-07-01' = {
-  name: 'cae-trainyard-${short}-${regionCodes[appLocation]}'
-  location: appLocation
-  tags: tags
-  properties: { appLogsConfiguration: { destination: 'azure-monitor' }, workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }], zoneRedundant: false }
-}
-
-#disable-next-line use-recent-api-versions
-resource environmentLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
-  name: 'to-shared-workspace'
-  scope: environment
-  properties: { workspaceId: logAnalyticsId, logs: [{ categoryGroup: 'allLogs', enabled: true }] }
-}
-
 resource app 'Microsoft.App/containerApps@2026-07-01' = {
-  name: 'ca-trainyard-${short}'
-  location: appLocation
-  tags: tags
+  name: 'ca-trainyard-${short}', location: appLocation, tags: tags
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${identity.id}': {} } }
   properties: {
-    environmentId: environment.id, workloadProfileName: 'Consumption'
+    environmentId: environmentId, workloadProfileName: 'Consumption'
     configuration: {
       activeRevisionsMode: 'Single'
       ingress: { external: true, targetPort: 8000, transport: 'auto', allowInsecure: false }
@@ -108,8 +89,7 @@ resource app 'Microsoft.App/containerApps@2026-07-01' = {
 }
 
 resource auth 'Microsoft.App/containerApps/authConfigs@2026-07-01' = {
-  parent: app
-  name: 'current'
+  parent: app, name: 'current'
   properties: {
     platform: { enabled: true }
     globalValidation: { unauthenticatedClientAction: 'RedirectToLoginPage', redirectToProvider: 'azureactivedirectory', excludedPaths: ['/healthz'] }

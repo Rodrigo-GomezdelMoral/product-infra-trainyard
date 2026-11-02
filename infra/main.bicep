@@ -26,7 +26,7 @@ param foundryName string
 param projectName string
 param chatModel string
 param location string = resourceGroup().location
-@description('Region of the Container Apps environment and app only; Sweden Central allows one environment per subscription, already used (ADR-017).')
+@description('Region of cae-trainyard-env and both apps only: the subscription allows one Container Apps environment per region and five in all (ADR-017, ADR-018).')
 param appLocation string = 'germanywestcentral'
 param budgetStartDate string = utcNow('yyyy-MM-01')
 
@@ -35,6 +35,7 @@ var short = production ? 'prod' : 'stg'
 var tags = { project: 'product-infra-trainyard', environment: env, owner: 'Rodrigo-GomezdelMoral' }
 var shared = resourceGroup(sharedResourceGroup)
 var logAnalyticsId = resourceId(sharedResourceGroup, 'Microsoft.OperationalInsights/workspaces', logAnalyticsName)
+var cae = { name: 'cae-trainyard-env', group: 'rg-trainyard-prod-swc' }
 
 resource registry 'Microsoft.ContainerRegistry/registries@2025-11-01' existing = { name: registryName, scope: shared }
 resource foundry 'Microsoft.CognitiveServices/accounts@2026-07-01' existing = { name: foundryName, scope: shared }
@@ -75,10 +76,16 @@ module ml 'modules/ml.bicep' = {
   }
 }
 
+module containerEnvironment 'modules/environment.bicep' = if (production) {
+  scope: resourceGroup(cae.group), params: { name: cae.name, location: appLocation, tags: union(tags, { environment: 'shared' }), logAnalyticsId: logAnalyticsId }
+}
+
+resource sharedEnvironment 'Microsoft.App/managedEnvironments@2026-07-01' existing = { name: cae.name, scope: resourceGroup(cae.group) }
+
 module app 'modules/app.bicep' = {
-  dependsOn: [sharedAccess, submitAsAml, routeAsEp]
+  dependsOn: [sharedAccess, submitAsAml, routeAsEp, containerEnvironment]
   params: {
-    location: location, appLocation: appLocation, tags: tags, short: short, maxReplicas: production ? 3 : 2, logAnalyticsId: logAnalyticsId, authClientId: authClientId
+    location: location, appLocation: appLocation, tags: tags, short: short, maxReplicas: production ? 3 : 2, environmentId: sharedEnvironment.id, authClientId: authClientId
     image: '${registry.properties.loginServer}/product-infra-trainyard@${digest}', registryServer: registry.properties.loginServer
     identity: appRef
     settings: {
