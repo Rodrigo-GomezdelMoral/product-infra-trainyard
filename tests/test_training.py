@@ -7,8 +7,8 @@ import pandas as pd
 import yaml
 from mlflow import MlflowClient
 
-from ml.features import LABEL
-from ml.pipeline import INSTANCE, build, components
+from ml.features import FEATURES, LABEL
+from ml.pipeline import INSTANCE, build, components, monitor
 from ml.score import Scorer
 from ml.steps import COMPONENTS, LINEAGE, STEPS, evaluate, fit, gate, local, register, save
 from ops.feed import write
@@ -35,6 +35,7 @@ def test_components_local(tmp_path: Path, tracking: None) -> None:
     assert json.loads(Path(run["report"]).read_text(encoding="utf-8"))["gate"] == "passed"
     assert client.get_model_version("trainyard-risk", "1").tags["git_sha"] == "abc1234"
     train, validation = (pd.read_parquet(run[name]) for name in ("train", "validation"))
+    assert list(pd.read_parquet(Path(run["reference"], "train.parquet")).columns) == ["unit", *FEATURES]
     again = [fit(train, validation, 42, 6, 0.6)[0].calibration for _ in range(2)]
     assert again == [Scorer.load(Path(run["model"])).calibration] * 2
 
@@ -53,6 +54,10 @@ def test_pipeline_builds() -> None:
     assert {str(n.component.environment.build.path) for n in job.jobs.values()} == {"../environment"}
     assert nodes["evaluate"]["inputs"]["model"] == {"path": "${{parent.jobs.train.outputs.model}}"}
     assert {name: nodes["register"]["inputs"][name] for name in LINEAGE} == TAGS
+    assert nodes["prep"]["outputs"]["reference"] == {"name": "trainyard-reference", "version": "training-x"}
+    signals = monitor("ep", "blue", "azureml:trainyard-reference:1").create_monitor.monitoring_signals or {}
+    contexts = [getattr(getattr(signal, "reference_data", None), "data_context", None) for signal in signals.values()]
+    assert contexts == ["training", None, "training"]
     alone = build(components(), "azureml:fleet-feed:5", "y", "id", "sha")._to_dict()["jobs"]["evaluate"]["inputs"]
     assert nodes["evaluate"]["inputs"]["champion_version"] == "2" and "champion" in nodes["evaluate"]["inputs"]
     assert not {"champion", "champion_version"} & set(alone)

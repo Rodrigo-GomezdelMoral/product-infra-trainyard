@@ -3,7 +3,7 @@ type: command
 name: prep
 display_name: Prepare
 version: 1
-description: One feature row per unit and day from the fleet feed, with ml/features.py, split by time into train, validation and holdout with a 7-day gap between them.
+description: One feature row per unit and day from the fleet feed, with ml/features.py, split by time into train, validation and holdout with a 7-day gap between them; the train rows, as the scoring request sends them, are also the monitor's reference.
 inputs:
   feed:
     type: uri_folder
@@ -20,6 +20,8 @@ outputs:
     type: uri_file
   holdout:
     type: uri_file
+  reference:
+    type: mltable
 code: ../..
 environment:
   build:
@@ -27,4 +29,4 @@ environment:
 command: >-
   python -m ml.steps prep --feed ${{inputs.feed}} --validation-days ${{inputs.validation_days}}
   --holdout-days ${{inputs.holdout_days}} --train ${{outputs.train}} --validation ${{outputs.validation}}
-  --holdout ${{outputs.holdout}}
+  --holdout ${{outputs.holdout}} --reference ${{outputs.reference}}

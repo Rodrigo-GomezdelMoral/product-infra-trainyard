@@ -10,10 +10,13 @@ from pathlib import Path
 from typing import Any
 
 from azure.ai.ml import Input, MLClient, load_component
+from azure.ai.ml.constants import MonitorDatasetContext
 from azure.ai.ml.dsl import pipeline
 from azure.ai.ml.entities import (
     CodeConfiguration,
     DataCollector,
+    DataDriftSignal,
+    DataQualitySignal,
     DeploymentCollection,
     JobResourceConfiguration,
     ManagedIdentityConfiguration,
@@ -22,14 +25,18 @@ from azure.ai.ml.entities import (
     MonitoringTarget,
     MonitorSchedule,
     PipelineJob,
+    PredictionDriftSignal,
     RecurrencePattern,
     RecurrenceTrigger,
+    ReferenceData,
     ServerlessSparkCompute,
 )
+from azure.core.exceptions import ResourceNotFoundError
 
 COMPONENTS, STEPS = Path(__file__).parent / "components", ("prep", "train", "evaluate", "register")
 INSTANCE, EXPERIMENT = "Standard_F2s_v2", "trainyard-training"
 FEED, MODEL, MONITOR, SERVING = "fleet-feed", "trainyard-risk", "trainyard-monitor", "Standard_DS1_v2"
+REFERENCE = "trainyard-reference"
 
 
 def components() -> dict[str, Any]:
@@ -47,6 +54,7 @@ def build(
 
     def training(feed: Input) -> None:
         prep = steps["prep"](feed=feed)
+        prep.outputs.reference.name, prep.outputs.reference.version = REFERENCE, name
         train = steps["train"](train=prep.outputs.train, validation=prep.outputs.validation)
         evaluate = steps["evaluate"](model=train.outputs.model, holdout=prep.outputs.holdout, **compared)
         lineage = {"data_asset": asset, "data_version": version, "git_sha": git_sha, "pipeline_job": name}
@@ -102,11 +110,35 @@ def deployment(client: MLClient, endpoint: str, slot: str, model: str, version: 
     )
 
 
-def monitor(endpoint: str, slot: str) -> MonitorSchedule:
-    """REQ-04, ADR-010: out-of-box GA signals on serverless Spark, daily at 03:15 UTC."""
+def reference(client: MLClient, endpoint: str, slot: str) -> str | None:
+    """ADR-010: the train rows of the pipeline job that produced the model in `slot`; older models have none."""
+    model = str(client.online_deployments.get(slot, endpoint).model).rsplit("/", 1)[-1]
+    job = (client.models.get(MODEL, model).tags or {}).get("pipeline_job")
+    try:
+        return f"azureml:{REFERENCE}:{client.data.get(REFERENCE, version=str(job)).version}"
+    except ResourceNotFoundError:
+        return None
+
+
+def monitor(endpoint: str, slot: str, reference: str | None = None) -> MonitorSchedule:
+    """REQ-04, ADR-010: GA signals on serverless Spark, daily at 03:15 UTC; drift and quality against training data."""
     target = MonitoringTarget(ml_task="classification", endpoint_deployment_id=f"azureml:{endpoint}:{slot}")
+    signals: dict[str, Any] = {}
+    if reference:
+        training = ReferenceData(
+            input_data=Input(type="mltable", path=reference), data_context=MonitorDatasetContext.TRAINING
+        )
+        drift, quality = (
+            DataDriftSignal._get_default_data_drift_signal(),
+            DataQualitySignal._get_default_data_quality_signal(),
+        )
+        drift.reference_data = quality.reference_data = training
+        prediction = PredictionDriftSignal._get_default_prediction_drift_signal()
+        signals = {"data-drift-signal": drift, "prediction-drift-signal": prediction, "data-quality-signal": quality}
     definition = MonitorDefinition(
-        compute=ServerlessSparkCompute(instance_type="standard_e4s_v3", runtime_version="3.4"), monitoring_target=target
+        compute=ServerlessSparkCompute(instance_type="standard_e4s_v3", runtime_version="3.4"),
+        monitoring_target=target,
+        monitoring_signals=signals,
     )
     daily = RecurrenceTrigger(frequency="day", interval=1, schedule=RecurrencePattern(hours=3, minutes=15))
     return MonitorSchedule(name=MONITOR, trigger=daily, create_monitor=definition)
