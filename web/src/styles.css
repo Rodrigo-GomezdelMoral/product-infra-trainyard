@@ -83,7 +83,7 @@ h3 {
   gap: 16px;
   min-height: 0;
   padding: 16px;
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--surface);
   border-radius: var(--radius);
 }
@@ -101,6 +101,13 @@ h3 {
   font-weight: 600;
 }
 
+.sidebar nav {
+  flex: 1;
+  min-height: 0;
+  margin: 0 -8px;
+  padding: 0 8px;
+  overflow-y: auto;
+}
 .sidebar ul {
   margin: 0;
   padding: 0;
@@ -220,7 +227,11 @@ h3 {
 
 .me > span:nth-child(2) {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
   font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .me small {
