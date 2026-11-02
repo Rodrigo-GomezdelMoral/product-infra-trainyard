@@ -1,6 +1,6 @@
 # ADR-017 · The Container Apps environment and app in Germany West Central
 
-**Status:** accepted · **Date:** 2026-11-01
+**Status:** accepted, amended by ADR-018 · **Date:** 2026-11-01, amended 2026-11-02
 
 ## Context
 
@@ -28,11 +28,11 @@ The quota limit counts environments per subscription and region. The usages API 
 
 ## Decision
 
-Option 6, which replaces the owner's `westeurope`. Only the Container Apps environment and the app move. `infra/main.bicep` takes `appLocation`, default `germanywestcentral`, for both environments, and `infra/modules/app.bicep` uses it for the environment and the app only. The environments are `cae-trainyard-stg-gwc` and `cae-trainyard-prod-gwc`, and the region code follows `appLocation`. The app keeps its name, `ca-trainyard-<env>`, so the owner's sign-in script and the workflows do not change: they read the app by name and its host from the app. Resource groups, identities, Cosmos DB, the workspace, storage, Key Vault, Application Insights, the endpoint, the alerts and the workbook stay in `swedencentral`.
+Option 6, which replaces the owner's `westeurope`. Only the Container Apps environment and the app move. `infra/main.bicep` takes `appLocation`, default `germanywestcentral`, for both environments, and `infra/modules/app.bicep` uses it for the environment and the app only. The environments are `cae-trainyard-stg-gwc` and `cae-trainyard-prod-gwc`, and the region code follows `appLocation`. The app keeps its name, `ca-trainyard-<env>`, so the owner's sign-in script and the workflows do not change: they read the app by name and its host from the app. **Amended 2026-11-02 (ADR-018):** the subscription also allows 5 environments in all and 1 per region, so both apps now run in one environment, `cae-trainyard-env`, in `germanywestcentral`, declared by production; the per-environment names above no longer exist. Resource groups, identities, Cosmos DB, the workspace, storage, Key Vault, Application Insights, the endpoint, the alerts and the workbook stay in `swedencentral`.
 
 ## Consequences
 
 - **Latency.** Each call from the app to Cosmos DB, the endpoint's scoring URI, the workspace or Application Insights crosses a 27 ms round trip. A chat turn (read and write the session, one or two tool calls) gains about 0.1–0.2 s against the 3 s time-to-first-token SLO. The SLA (REQ-07, REQ-08) is measured at the endpoint, server side, so it does not change. Locust's `/api/fleet/risk` scenario measures the app path end to end.
 - **Residency.** Data at rest stays in Sweden Central. The app handles requests in memory in Germany West Central. The environment's logs go to the shared Log Analytics workspace in Sweden Central through its diagnostic setting, which accepts a workspace in any region. Traffic between the two regions uses TLS 1.2 on the Microsoft backbone. The user-assigned identity `id-trainyard-app-<env>` stays in Sweden Central and is attached to the app across regions. Another product in this subscription runs the same pattern from `spaincentral`.
 - **Price.** Container Apps prices in Germany West Central equal Sweden Central's: USD 0.000024 per vCPU-second, 0.000003 per GiB-second and 0.40 per million requests (Retail Prices API, 2026-11-01). Inter-region transfer adds USD 0.02 per GB, for image pulls from the shared registry and the responses. `docs/cost.md` keeps its totals.
-- **Moving back.** A Container App cannot change region. To return to `swedencentral` once quota allows, delete `ca-trainyard-<env>` and its environment, then deploy with `appLocation` set to `swedencentral`. That needs a new sign-in callback (`03-login.sh`). Before choosing any other region, run the same preflight: the usages API alone does not show a refused region.
+- **Moving back.** A Container App cannot change region. To return to `swedencentral` once quota allows, delete both apps and `cae-trainyard-env` by hand (an environment cannot change region either), recreate it with `10-environment.sh`, its `LOCATION` set to `swedencentral`, change `appLocation`'s default in `infra/main.bicep` to match, then deploy both. That needs new sign-in callbacks (`03-login.sh`). Before choosing any other region, run the same preflight: the usages API alone does not show a refused region.
