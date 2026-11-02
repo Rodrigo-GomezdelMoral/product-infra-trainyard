@@ -12,7 +12,7 @@ import { Approval, Promotion } from "./Cards";
 const BRAND = `${import.meta.env.BASE_URL}brand/`;
 const POLL = DEMO ? 3000 : 60000;
 const GONE = "The canary is no longer waiting for a decision: ask Trainyard for the model status.";
-const SUGGESTIONS = ["Which trains should we inspect this week?", "Why is EMU 2417 at risk?", "Is the model drifting?", "Retrain and compare with the current model"];
+const SUGGESTIONS = ["Which trains should we inspect this week?", "Why is EMU 2402 at risk?", "Is the model drifting?", "Retrain and compare with the current model"];
 type Entry =
   | { kind: "user"; text: string }
   | { kind: "answer"; text: string }

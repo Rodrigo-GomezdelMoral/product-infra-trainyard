@@ -28,6 +28,7 @@ from ml.features import FEATURES, HORIZON, LABEL, training_rows
 from ml.score import Scorer
 
 COMPONENTS, STEPS = Path(__file__).parent / "components", ("prep", "train", "evaluate", "register")
+MLTABLE = "paths:\n  - file: ./train.parquet\ntransformations:\n  - read_parquet:\n      include_path_column: false\n"
 WEEK, SERIES, TYPES = pd.Timedelta(days=7), {"a": 0, "b": 1}, {"integer": int, "number": float, "string": str}
 LINEAGE = ("git_sha", "data_asset", "data_version", "pipeline_job")
 LIMITS = ("min_recall", "min_precision", "min_series_recall", "max_recall_loss")
@@ -141,10 +142,14 @@ def register(model: Path, report: dict[str, Any], name: str, lineage: dict[str, 
 
 def run_prep(args: argparse.Namespace) -> None:
     feed = (pd.read_parquet(args.feed / f"{table}.parquet") for table in ("telemetry", "failures"))
-    for name, rows in split(training_rows(*feed), args.validation_days, args.holdout_days).items():
+    parts = split(training_rows(*feed), args.validation_days, args.holdout_days)
+    for name, rows in parts.items():
         rows.to_parquet(getattr(args, name), index=False)
         mlflow.log_metrics({f"{name}_rows": len(rows), f"{name}_positives": int(rows[LABEL].sum())})
         mlflow.log_params({f"{name}_from": rows["as_of"].min().date(), f"{name}_to": rows["as_of"].max().date()})
+    args.reference.mkdir(parents=True, exist_ok=True)
+    parts["train"][["unit", *FEATURES]].to_parquet(args.reference / "train.parquet", index=False)
+    (args.reference / "MLTable").write_text(MLTABLE, encoding="utf-8")
 
 
 def run_train(args: argparse.Namespace) -> None:

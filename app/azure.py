@@ -24,7 +24,7 @@ from azure.storage.blob import ContainerClient
 
 from app.platform import Endpoint, Health, Model, NotReadyError, Run, Scores
 from ml.features import FEATURES, features
-from ml.pipeline import EXPERIMENT, FEED, MODEL, MONITOR, deployment, submit
+from ml.pipeline import EXPERIMENT, FEED, MODEL, MONITOR, deployment, reference, submit
 from ml.pipeline import monitor as schedule
 
 LINEAGE = ("data_asset", "data_version", "pipeline_job", "git_sha", "gate", "champion")
@@ -161,7 +161,9 @@ class AzureML:
 
     @threaded
     def watch(self, slot: str) -> None:
-        self.ml.schedules.begin_create_or_update(schedule(self.name, slot)).result()
+        self.ml.schedules.begin_create_or_update(
+            schedule(self.name, slot, reference(self.ml, self.name, slot))
+        ).result()
         if environ["ENVIRONMENT"] != "production":
             self.ml.schedules.begin_disable(MONITOR).result()
 

@@ -1,6 +1,6 @@
 # ADR-010 · GA monitoring signals only; predictive quality from matured labels
 
-**Status:** accepted · **Date:** 2026-10-31
+**Status:** accepted · **Date:** 2026-10-31 · **Amended:** 2026-11-02, the reference is the training data
 
 ## Context
 
@@ -25,9 +25,11 @@ Learn (how-to-monitor-model-performance, 2026-02-11) describes the out-of-box se
 
 ## Decision
 
-**Option 1.**
+**Option 1 until 2026-11-02, then Option 2, decided by the owner before production:** the monitor compares production with the data the champion was trained on, the train split of its `fleet-feed` version.
 
-- **One `MonitorSchedule`, `trainyard-monitor`,** defined in `ml/pipeline.py` (`monitor`): classification, the champion deployment as target, no signals listed (so the three GA signals with their defaults), serverless Spark `standard_e4s_v3`, runtime 3.4, daily at 03:15 UTC.
+- **One `MonitorSchedule`, `trainyard-monitor`,** defined in `ml/pipeline.py` (`monitor`): classification, the champion deployment as target, serverless Spark `standard_e4s_v3`, runtime 3.4, daily at 03:15 UTC, the three GA signals with the SDK's default thresholds.
+- **The reference is training data.** `prep` writes a fourth output, `reference` (`mltable`): the train rows with exactly the columns the scoring request sends (`unit` and the features) and an `MLTable` file. The pipeline registers it as the data asset `trainyard-reference`, version = the pipeline job's name, which is also the model's `pipeline_job` tag. `reference()` follows the deployment's model to that asset. Data drift and data quality use it as reference with the `training` context; prediction drift keeps the out-of-box reference, the deployment's earlier outputs, because training data has labels, not predicted probabilities. Production data is the collected `model_inputs` and `model_outputs`, filled in by the SDK.
+- **A model trained before 2026-11-02 has no reference asset** (versions 1 to 3 in staging): its schedule falls back to the out-of-box definition (production against recent past production).
 - **The champion is watched, whatever slot it is in.** The promotion calls `watch(slot)` when a model goes to 100 % and when traffic goes back after a rollback (ADR-009).
 - **Production runs it every day. Staging creates it disabled** and runs it on demand: `deploy.yml` with the `monitor` input calls `az ml schedule trigger` (ADR-012). Staging pays only for the runs it needs.
 - **No e-mail from the monitor:** its creator is the app's managed identity. Alerting stays in Azure Monitor: the scheduled query on `AmlRunStatusChangedEvent` with `Status == "Failed"` notifies the shared action group, and the workbook shows the runs.
@@ -38,6 +40,7 @@ Learn (how-to-monitor-model-performance, 2026-02-11) describes the out-of-box se
 ## State
 
 - **Implemented, type-checked and tested with the double:** the schedule definition in `ml/pipeline.py`, `watch` and `monitor` in `app/azure.py`, the `monitor` input of `deploy.yml`.
+- **Implemented and tested on 2026-11-02, pending live:** the `reference` output of `prep` (`test_components_local` reads its columns), its registration and the signals' references (`test_pipeline_builds`); live, the first training run after the merge registers `trainyard-reference`, and the next promotion of that model creates the schedule with it. Read live in staging on 2026-11-02: `reference()` returns none for model 2 on `blue`, so its schedule stays out-of-box; listing a data name that was never registered raises ("container was not found"), so `reference()` reads the one version it needs.
 - **Pending, live in phase 8:** the first run, the `firmware-b` drift flagged, the alert received, the workbook.
 - **NOT VERIFIED until phase 8:**
   - Spark nodes per run, and so the cost (estimate: 2 × E4s_v3 for 15 minutes, about USD 0.28 a run, USD 8.5 a month in production);
@@ -47,6 +50,7 @@ Learn (how-to-monitor-model-performance, 2026-02-11) describes the out-of-box se
 
 ## Consequences
 
-- **Drift means a change between production windows,** not a difference from the training data. `firmware-b` shows as drift because Series B shifts against the days before. A difference present from the first day is not seen as drift; the gate and the matured-label metrics catch a model that is wrong from the start.
-- **The staging drift take needs production data before the shift:** scoring traffic on the days before the `firmware-b` feed operation, then traffic after it, then a triggered run.
-- **Moving to Option 2** costs one more `prep` output, one MLTable asset per run, and the signals listed explicitly. It is worth it once the model sees real data.
+- **Drift means a difference from the training data,** so a training-serving skew shows from the first run, and `firmware-b` shows as drift as soon as Series B's shifted rows are scored by a model trained before it. The staging drift take needs no traffic from before the shift.
+- **Every training run registers one more data asset version,** a few hundred kilobytes of parquet in the workspace storage; refused challengers keep theirs, which costs cents and keeps every run auditable.
+- **The signals are listed explicitly,** built from the SDK's own default signals (`_get_default_*_signal`, private classmethods of the pinned `azure-ai-ml==1.35.2`), so the thresholds stay the out-of-box ones; a bump of the SDK re-runs `test_pipeline_builds`, which checks the reference of each signal.
+- **Prediction drift stays production against production:** the probabilities of a new model are compared with its own earlier outputs.

@@ -31,7 +31,7 @@ A language model in this loop brings two risks. It can invent or recompute a num
 
 ## State
 
-**Implemented and tested.** CI runs the agent tests with a scripted model. In phase 2 the same tests could run against the real `gpt-5-mini` of the shared base when `FOUNDRY_PROJECT_ENDPOINT` was set, and 5 of 5 passed on 2026-10-31. Since phase 4, the live path is the agent evaluation (`eval/`, `docs/evaluation.md`): 43 cases with thresholds, run by `eval.yml` on every pull request that can change the agent. Its `facts` check adds the per-unit check promised below.
+**Implemented and tested.** CI runs the agent tests with a scripted model. In phase 2 the same tests could run against the real `gpt-5-mini` of the shared base when `FOUNDRY_PROJECT_ENDPOINT` was set, and 5 of 5 passed on 2026-10-31. Since phase 4, the live path is the agent evaluation (`eval/`, `docs/evaluation.md`): 44 cases with thresholds, run by `eval.yml` on every pull request that can change the agent. Its `facts` check adds the per-unit check promised below.
 
 **Live runs, 2026-10-31.** Five scenarios, three rounds each, 15 runs in all, with the endpoint and Azure Machine Learning replaced by doubles:
 
@@ -50,3 +50,4 @@ A language model in this loop brings two risks. It can invent or recompute a num
 - **An injected prompt from a `Reader` can only read.** In 2 of 3 rounds the injected promotion request made the model call `model_status` or `fleet_risk`, which is harmless.
 - **The numbers check is about provenance, not correctness.** A number copied from the wrong unit's row would pass it; phase 4's evaluators add per-unit checks.
 - **A model owner still decides.** The agent never changes traffic: promotion is the workflow of ADR-009, and each of its steps waits for the owner.
+- **A follow-up about provenance must reach `model_status`.** In staging on 2026-11-01, after an explanation of one unit, "Where does that score come from?" got the explanation again: model version, threshold and signals, with no training job, `fleet-feed` version or commit, and no call to `model_status`. The cause is in the instructions, not in the tool filter (a `Reader` has the tool): they sent only "lineage, metrics, traffic or drift" to `model_status`, the earlier `explain_unit` output already held a model version, and with low reasoning effort the model answered from it. Since 2026-11-02 the instructions send any question about where a score or number comes from to `model_status`, forbid answering it from earlier answers, and the tool's description starts with "Where a score comes from"; eval case `common-27` asks it.
