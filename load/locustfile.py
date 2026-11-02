@@ -1,8 +1,9 @@
 """REQ-07, REQ-08: load scenarios against staging, run by `load-test.yml`.
 
 The inference endpoint is called with an Entra ID token (`aad_token`) and a real 40-row request built by the same
-simulator and features as the app; `/api/fleet/risk` uses no language model, so the Container App replicas scale
-without spending tokens. The chat scenario is two users asking the planner's question.
+simulator and features as the app, from the last week of the staging feed after `firmware-b`, so the rows the load
+writes to the data collector look like the fleet the monitor watches; `/api/fleet/risk` uses no language model, so
+the Container App replicas scale without spending tokens. The chat scenario is two users asking the planner's question.
 """
 
 import json
@@ -17,8 +18,8 @@ from locust.env import Environment
 from app.domain.simulator import simulate
 from ml.features import features
 
-FEED = simulate(date(2026, 1, 1), 90)
-ROWS = features(FEED.telemetry, FEED.failures, pd.Timestamp("2026-01-26")).drop(columns="as_of")
+FEED = simulate(date(2026, 10, 1), 31, firmware_b_from=date(2026, 5, 1))
+ROWS = features(FEED.telemetry, FEED.failures, pd.Timestamp("2026-10-31")).drop(columns="as_of")
 BODY = json.dumps({"rows": ROWS.to_dict("records")})
 SLA_P95_MS, SLA_FAILED, STRESS_FAILED = 500, 0.005, 0.01
 SCORE = "score 40 rows"
