@@ -8,7 +8,7 @@ Trainyard has two surfaces. The inference endpoint scores the fleet and is alway
 
 ## Options
 
-1. **An SLA on both.** A committed chat SLA would need a warm replica, which bills every hour at the idle rate (about EUR 10 a month, as priced for the sibling product Juriscope), and would still depend on a shared tokens-per-minute quota.
+1. **An SLA on both.** A committed chat SLA would need a warm replica, which bills every hour at the idle rate (about EUR 10 a month), and would still depend on a shared tokens-per-minute quota.
 2. **An SLA on the endpoint and an SLO on the chat.**
 
 ## Decision
