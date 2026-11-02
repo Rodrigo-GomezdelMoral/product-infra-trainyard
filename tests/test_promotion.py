@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -63,7 +64,10 @@ def test_shadow_step(platform: FakePlatform) -> None:
     assert (
         facts["offline"]["champion_recall"] == 0.84 and facts["challenger"]["agreement"] == 0.95 and not facts["ready"]
     )
-    assert busy == BUSY and not ready(Health(0, 0, 0, 30))
+    early, late = datetime.now(UTC).isoformat(), (datetime.now(UTC) - timedelta(minutes=31)).isoformat()
+    assert facts["started"] == (again.card.facts["started"] if again.card else None)
+    assert busy == BUSY and not ready(Health(0, 0, 0, 30), late) and ready(Health(240, 0, 182.0, 1.0), early)
+    assert ready(Health(57, 0, 170.0, 9.0), late) and not ready(Health(57, 0, 170.0, 9.0), early)
     assert [s.card and s.card.step for s in (again, pending)] == ["shadow", "shadow"]
     assert platform.calls == ["deploy green 3", "route {'blue': 100, 'green': 0} {'green': 20}"]
 

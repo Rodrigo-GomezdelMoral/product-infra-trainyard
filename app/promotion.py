@@ -54,10 +54,13 @@ for kind in (Plan, Card):
     register_checkpoint_type(kind)
 
 
-def ready(shadow: Health) -> bool:
-    return (
-        shadow.requests > 0 and shadow.ok and (shadow.requests >= SHADOW_REQUESTS or shadow.minutes >= SHADOW_MINUTES)
-    )
+def ready(shadow: Health, started: str) -> bool:
+    waited = hours_since(started) * 60 >= SHADOW_MINUTES
+    return shadow.requests > 0 and shadow.ok and (shadow.requests >= SHADOW_REQUESTS or waited)
+
+
+def now() -> str:
+    return datetime.now(UTC).isoformat()
 
 
 def hours_since(moment: str) -> float:
@@ -123,22 +126,23 @@ class Shadow(Step):
         if not plan.live:
             return await self.go_live(plan, ctx)
         await self.platform.route({plan.live: 100, plan.slot: 0}, {plan.slot: MIRROR})
-        await self.ask(plan, ctx)
+        await self.ask(plan, ctx, now())
 
-    async def ask(self, plan: Plan, ctx: WorkflowContext[Plan, str]) -> None:
+    async def ask(self, plan: Plan, ctx: WorkflowContext[Plan, str], started: str) -> None:
         shadow, live = await self.platform.health(plan.slot), await self.platform.health(plan.live)
         offline = next(m.metrics for m in await self.platform.models() if m.version == plan.challenger)
-        facts = {"offline": offline, "challenger": asdict(shadow), "champion": asdict(live), "ready": ready(shadow)}
+        facts: dict[str, Any] = {"offline": offline, "challenger": asdict(shadow), "champion": asdict(live)}
+        facts |= {"started": started, "ready": ready(shadow, started)}
         await ctx.request_info(Card("shadow", plan, facts), str)
 
     @response_handler
     async def decide(self, card: Card, decision: str, ctx: WorkflowContext[Plan, str]) -> None:
         if decision != FORWARD[card.step]:
             await self.undo(card.plan, ctx, "stopped in shadow", rolled_back=False)
-        elif ready(await self.platform.health(card.plan.slot)):
+        elif ready(await self.platform.health(card.plan.slot), started := card.facts.get("started") or now()):
             await ctx.send_message(card.plan)
         else:
-            await self.ask(card.plan, ctx)
+            await self.ask(card.plan, ctx, started)
 
 
 class Canary(Step):

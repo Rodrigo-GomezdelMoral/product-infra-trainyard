@@ -50,7 +50,7 @@ Learn (how-to-monitor-model-performance, 2026-02-11) describes the out-of-box se
 
 ## Consequences
 
-- **Drift means a difference from the training data,** so a training-serving skew shows from the first run, and `firmware-b` shows as drift as soon as Series B's shifted rows are scored by a model trained before it. The staging drift take needs no traffic from before the shift.
+- **Drift means a difference from the training data,** so a training-serving skew shows from the first run, and `firmware-b` shows as drift as soon as Series B's shifted rows are scored by a model trained before it. The staging drift take needs no traffic from before the shift. The load test feeds the data collector too, so since 2026-11-02 it scores the last week of the staging feed after `firmware-b` (`load/locustfile.py`); before, it sent a January week without the shift, which would have diluted the drift the monitor reads.
 - **Every training run registers one more data asset version,** a few hundred kilobytes of parquet in the workspace storage; refused challengers keep theirs, which costs cents and keeps every run auditable.
 - **The signals are listed explicitly,** built from the SDK's own default signals (`_get_default_*_signal`, private classmethods of the pinned `azure-ai-ml==1.35.2`), so the thresholds stay the out-of-box ones; a bump of the SDK re-runs `test_pipeline_builds`, which checks the reference of each signal.
 - **Prediction drift stays production against production:** the probabilities of a new model are compared with its own earlier outputs.
