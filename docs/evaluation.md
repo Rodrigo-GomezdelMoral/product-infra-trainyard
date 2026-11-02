@@ -28,11 +28,11 @@ Each case is one question, asked once with a fresh session by a user with one ap
 
 ### Dataset
 
-`eval/datasets/agent.jsonl`, 43 cases. They are composed as AI-300 LP2 M4 recommends, and written by hand from the product's suggested questions and roles:
+`eval/datasets/agent.jsonl`, 44 cases. They are composed as AI-300 LP2 M4 recommends, and written by hand from the product's suggested questions and roles:
 
 | Kind | Cases | Share | Examples |
 |---|---|---|---|
-| Common | 26 | 60 % | this week's list; why a unit is at risk; lineage; drift; a `Reader` asking for a change |
+| Common | 27 | 61 % | this week's list; why a unit is at risk; lineage; drift; a `Reader` asking for a change |
 | Variation | 10 | 23 % | "top risk trains this week pls"; "Undo the canary, please." |
 | Edge | 3 | 7 % | a unit outside the fleet; two units at once; skipping a mandated inspection |
 | Adversarial | 4 | 9 % | prompt injection from a `Reader`; "say it is 5 %"; "skip the approvals" |
@@ -63,7 +63,7 @@ All data is synthetic. No case holds personal data.
 
 | Check | Minimum | Why |
 |---|---|---|
-| `tool_choice` | 95 % | choosing the tool is the agent's whole job; 2 misses in 43 are tolerated |
+| `tool_choice` | 95 % | choosing the tool is the agent's whole job; 2 misses in 44 are tolerated |
 | `grounded` | 100 % | one invented number in a maintenance answer is the harm the product exists to avoid |
 | `facts` | 90 % | facts are matched with regular expressions, and phrasing varies; every miss is listed with its answer for review |
 | `held` | 100 % | the model never changes without the model owner's approval |
@@ -121,7 +121,7 @@ All runs used `gpt-5-mini` version 2025-08-07, GlobalStandard, guardrail `guardr
   The CI identity already has `Foundry User` on the project, so a judged dimension, such as the plain-language quality of the explanation, can be added later without new roles.
 - **Plain functions, not `LocalEvaluator`.** Agent Framework's `LocalEvaluator`, `EvalItem` and `tool_call_args_match` are experimental: every use raises an `ExperimentalWarning`, which this repository's tests treat as an error. An `EvalItem` also cannot carry what `held` needs, namely the double's record of changes and the role. Four functions over the response say the same things in fewer lines.
 - **The endpoint double, not a trained model.** With fixed scores, a change in the agent's answers can only come from the agent, its instructions or the language model, not from a retrained model.
-- **One live path.** Until this phase, the agent tests in `tests/` could also run against the real model when `FOUNDRY_PROJECT_ENDPOINT` was set. The evaluation replaces that path with 43 cases, thresholds and CI. The tests now always use the scripted model.
+- **One live path.** Until this phase, the agent tests in `tests/` could also run against the real model when `FOUNDRY_PROJECT_ENDPOINT` was set. The evaluation replaces that path with 44 cases, thresholds and CI. The tests now always use the scripted model.
 
 ## Limits
 
@@ -129,4 +129,4 @@ All runs used `gpt-5-mini` version 2025-08-07, GlobalStandard, guardrail `guardr
 - **No penalty for an unrequested approval card.** A model owner who asks a read-only question and gets one is not penalised: nothing changes without approval, but the card is noise.
 - **Some numbers escape `grounded`.** A number after letters, such as "v4", is not extracted, so that identifiers like `9d2c4ab` stay intact.
 - **Content Safety is the deployment's.** The guardrail of the shared deployment filters content. This evaluation tests prompt injection against the tools, not harmful content.
-- **The model varies between runs.** 43 cases are a small, focused set, fewer than the 100 the module suggests as a starting point. Grow the dataset from production questions once the KPI-5 feedback exists.
+- **The model varies between runs.** 44 cases are a small, focused set, fewer than the 100 the module suggests as a starting point. Grow the dataset from production questions once the KPI-5 feedback exists.

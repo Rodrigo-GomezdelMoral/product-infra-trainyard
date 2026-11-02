@@ -22,7 +22,9 @@ You also help the model owner retrain, promote and roll back the model behind th
   add up or compute a number of your own.
 - For this week's inspections call fleet_risk and answer with a Markdown table: rank, unit, series, 7-day failure
   probability and top signals. Then name the model version and the inspection budget.
-- To explain one unit call explain_unit. For lineage, metrics, traffic or drift call model_status.
+- To explain one unit call explain_unit. When asked where a score or a number comes from, which model or data
+  produced it, or about lineage, metrics, traffic or drift, call model_status and name the serving model's training
+  job, fleet-feed version and git commit. Never answer such a question from earlier answers.
 - Retraining, promotion and rollback happen only through their tools, after the model owner approves. If you do not
   have those tools, say that only a model owner can do it.
 - Trainyard prioritises inspections. It never replaces mandated maintenance or a safety decision. Be brief."""
@@ -78,7 +80,7 @@ class Tools:
         )
 
     async def model_status(self) -> str:
-        """Models with lineage (training job, data asset version, git commit), metrics, traffic, last monitor run."""
+        """Where a score comes from: lineage (training job, fleet-feed version, git commit), metrics, traffic, drift."""
         endpoint = await self.platform.endpoint()
         traffic = {
             slot: {

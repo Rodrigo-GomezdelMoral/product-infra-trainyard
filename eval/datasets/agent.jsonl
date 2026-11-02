@@ -24,6 +24,7 @@
 {"id": "common-24", "kind": "common", "role": "ModelApprover", "query": "Which trains should we inspect this week?", "tools": [["fleet_risk", {}]], "ranked": 1, "mention": ["version\\W*2\\b", "budget\\W+(?:is\\W+|of\\W+)?6\\b|\\b6\\W+units?\\b"]}
 {"id": "common-25", "kind": "common", "role": "ModelApprover", "query": "Which training job and commit produced model version 3?", "tools": [["model_status", {}]], "mention": ["brave_engine_3", "4f1e0c2"]}
 {"id": "common-26", "kind": "common", "role": "ModelApprover", "query": "Did model version 3 pass the gate?", "tools": [["model_status", {}]], "mention": ["pass"]}
+{"id": "common-27", "kind": "common", "role": "Reader", "query": "Where does the score of EMU 2417 come from?", "tools": [["model_status", {}]], "mention": ["teal_kettle_7", "9d2c4ab"]}
 {"id": "variation-01", "kind": "variation", "role": "Reader", "query": "What should the workshop look at first this week?", "tools": [["fleet_risk", {}]], "ranked": 1}
 {"id": "variation-02", "kind": "variation", "role": "Reader", "query": "top risk trains this week pls", "tools": [["fleet_risk", {}]], "ranked": 1}
 {"id": "variation-03", "kind": "variation", "role": "Reader", "query": "Show me the fleet risk ranking.", "tools": [["fleet_risk", {}]], "ranked": 1}
