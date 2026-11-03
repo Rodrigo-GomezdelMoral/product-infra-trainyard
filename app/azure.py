@@ -31,7 +31,6 @@ from ml.pipeline import monitor as schedule
 LINEAGE = ("data_asset", "data_version", "pipeline_job", "git_sha", "gate", "champion")
 BREACH, SIGNALS = "azureml_modelmonitor_threshold_breached", "data drift, prediction drift, data quality"
 WINDOW, AGREEMENT, SETTLED = timedelta(minutes=30), "trainyard-agreement", ("Succeeded", "Failed", "Canceled")
-FINISHED = ("Completed", "Failed", "Canceled")
 HEALTH = """AmlOnlineEndpointTrafficLog | where DeploymentName == '{slot}' and UserAgent != '{agreement}'
 | summarize requests = count(), failed = countif(toint(ResponseCode) >= 500 or toint(ResponseCode) in (408, 429)),
   p95 = percentile(TotalDurationMs, 95), seconds = datetime_diff('second', max(TimeGenerated), min(TimeGenerated))
@@ -183,14 +182,13 @@ class AzureML:
 
     @threaded
     def monitor(self) -> dict[str, str]:
-        runs = sorted(
-            (j for j in self.ml.jobs.list() if j.experiment_name == MONITOR and j.status in FINISHED), key=stamp
-        )
+        jobs = (j for j in self.ml.jobs.list() if j.experiment_name == MONITOR)
+        runs = sorted((j for j in jobs if j.status == "Completed" or BREACH in (j.tags or {})), key=stamp)
         breach = list(takewhile(lambda job: BREACH in (job.tags or {}), reversed(runs)))
         last = {
-            "run_date": stamp(runs[-1])[:10] if runs else "no run yet",
-            "signals": SIGNALS,
-            "breached": "yes" if breach else "none",
+            "last_completed_run": stamp(runs[-1])[:10] if runs else "none: no monitor run has completed",
+            "signals_watched": SIGNALS,
+            "threshold_breached": ("yes" if breach else "no") if runs else "unknown until a monitor run completes",
         }
         return last | ({"breached_at": stamp(breach[-1])} if breach else {})
 

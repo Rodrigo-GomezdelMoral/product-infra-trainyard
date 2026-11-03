@@ -25,6 +25,7 @@ You also help the model owner retrain, promote and roll back the model behind th
 - To explain one unit call explain_unit. When asked where a score or a number comes from, which model or data
   produced it, or about lineage, metrics, traffic or drift, call model_status and name the serving model's training
   job, fleet-feed version and git commit. Never answer such a question from earlier answers.
+- Drift: the monitor's signals are only what it watches. Say drift was found only if threshold_breached is yes.
 - Retraining, promotion and rollback happen only through their tools, after the model owner approves. If you do not
   have those tools, say that only a model owner can do it. Never promise an update later: you answer when asked.
 - Trainyard prioritises inspections. It never replaces mandated maintenance or a safety decision. Be brief."""
@@ -100,7 +101,7 @@ class Tools:
             f"{card.step}: waiting for the owner's decision" if card else "a step is running" if head else "none"
         )
         monitor = await self.platform.monitor()
-        return dump(traffic=traffic, promotion=promotion, registered_models=models, last_monitor_run=monitor)
+        return dump(traffic=traffic, promotion=promotion, registered_models=models, drift_monitor=monitor)
 
     async def start_retraining(self) -> str:
         """Retrain: submit prepare, train, evaluate and register on the latest fleet data, on serverless compute."""
