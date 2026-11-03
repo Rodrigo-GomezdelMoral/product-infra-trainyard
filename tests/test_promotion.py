@@ -1,16 +1,19 @@
 import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from agent_framework import CheckpointStorage, FileCheckpointStorage, InMemoryCheckpointStorage
 
-from app.azure import HEALTH, MIRRORED, source
+from app.azure import BREACH, HEALTH, MIRRORED, AzureML, source
 from app.domain.simulator import Feed
 from app.platform import Endpoint, Health, Model, NotReadyError
 from app.promotion import BUSY, Status, ready
+from ml.pipeline import MONITOR
 from tests.doubles import FakeContainer, FakePlatform, promotions
 
 BACK, SERVED = Endpoint({"blue": "2"}, {"blue": 100}), "Model 3 serves 100 %; model 2 was removed."
@@ -162,3 +165,15 @@ def test_deployment_in_progress_is_finished_by_the_timer(feed: Feed, monkeypatch
     monkeypatch.setattr(platform, "deploy", slow)
     outcomes = steps(platform, lambda: storage, "start 2", "approve", "tick")
     assert outcomes == ["first", "Model 2 is being deployed to blue.", "Model 2 serves 100 % from blue."]
+
+
+def test_monitor_counts_only_completed_runs() -> None:
+    day = SimpleNamespace(created_at=datetime(2026, 11, 3, tzinfo=UTC))
+    job = partial(SimpleNamespace, experiment_name=MONITOR, creation_context=day, tags={})
+    jobs = [job(status="Canceled"), job(status="Failed")]
+    azure: Any = SimpleNamespace(ml=SimpleNamespace(jobs=SimpleNamespace(list=lambda: jobs)))
+    assert asyncio.run(AzureML.monitor(azure))["last_completed_run"] == "none: no monitor run has completed"
+    jobs.append(job(status="Failed", tags={BREACH: "true"}))
+    assert asyncio.run(AzureML.monitor(azure))["threshold_breached"] == "yes"
+    jobs.append(job(status="Completed"))
+    assert asyncio.run(AzureML.monitor(azure))["threshold_breached"] == "no"

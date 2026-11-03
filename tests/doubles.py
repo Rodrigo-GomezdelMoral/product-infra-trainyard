@@ -43,17 +43,10 @@ class FakePlatform:
         self.rows = features(feed.telemetry, feed.failures, WEEK)
         self.state = endpoint or Endpoint({"blue": "2"}, {"blue": 100})
         champion = {"recall": 0.84, "precision": 0.63, "weekly_units": 3.0}
-        self.registered = [
-            Model(
-                "2", champion, LINEAGE | {"data_version": "4", "pipeline_job": "teal_kettle_7", "git_sha": "9d2c4ab"}
-            ),
-            Model(
-                "3",
-                {"recall": 0.86, "precision": 0.66} | {f"champion_{name}": value for name, value in champion.items()},
-                LINEAGE
-                | {"data_version": "5", "pipeline_job": "brave_engine_3", "git_sha": "4f1e0c2", "champion": "2"},
-            ),
-        ]
+        two = LINEAGE | {"data_version": "4", "pipeline_job": "teal_kettle_7", "git_sha": "9d2c4ab"}
+        three = LINEAGE | {"data_version": "5", "pipeline_job": "brave_engine_3", "git_sha": "4f1e0c2", "champion": "2"}
+        challenger = {"recall": 0.86, "precision": 0.66} | {f"champion_{k}": v for k, v in champion.items()}
+        self.registered = [Model("2", champion, two), Model("3", challenger, three)]
         self.healthy = Health(240, 0, 182.0, 31.0, 0.96)
         self.canary: Health | BaseException = self.healthy
         self.calls: list[str] = []
@@ -109,12 +102,8 @@ class FakePlatform:
         return {"pipeline_job": "quiet_signal_8", "data_asset": "fleet-feed", "data_version": "5", "status": "Running"}
 
     async def monitor(self) -> dict[str, str]:
-        signals = {
-            "run_date": "2026-01-26",
-            "signals": "data drift, prediction drift, data quality",
-            "breached": "none",
-        }
-        return signals | {"breached_at": self.breached_at}
+        watched = {"last_completed_run": "2026-01-26", "signals_watched": "data drift, prediction drift, data quality"}
+        return watched | {"threshold_breached": "yes" if self.breached_at else "no", "breached_at": self.breached_at}
 
     async def runs(self, after: str) -> list[Run]:
         return [run for run in self.completed if run.ended > after]
