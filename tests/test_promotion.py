@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from agent_framework import CheckpointStorage, FileCheckpointStorage, InMemoryCheckpointStorage
 
+from app.azure import HEALTH, MIRRORED, source
 from app.domain.simulator import Feed
 from app.platform import Endpoint, Health, Model, NotReadyError
 from app.promotion import BUSY, Status, ready
@@ -70,6 +71,12 @@ def test_shadow_step(platform: FakePlatform) -> None:
     assert ready(Health(57, 0, 170.0, 9.0), late) and not ready(Health(57, 0, 170.0, 9.0), early)
     assert [s.card and s.card.step for s in (again, pending)] == ["shadow", "shadow"]
     assert platform.calls == ["deploy green 3", "route {'blue': 100, 'green': 0} {'green': 20}"]
+
+
+def test_shadow_health_reads_the_log_that_records_mirrored_requests() -> None:
+    shadow = Endpoint({"blue": "2", "green": "4"}, {"blue": 100}, {"green": 20})
+    assert source(shadow, "green") == MIRRORED and MIRRORED.startswith("AmlOnlineEndpointConsoleLog")
+    assert source(shadow, "blue") == source(Endpoint(shadow.models, {"blue": 90, "green": 10}), "green") == HEALTH
 
 
 def test_canary_health_rollback(platform: FakePlatform) -> None:

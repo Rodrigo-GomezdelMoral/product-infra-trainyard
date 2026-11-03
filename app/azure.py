@@ -10,6 +10,7 @@ from collections.abc import Callable, Coroutine
 from datetime import UTC, timedelta
 from itertools import takewhile
 from os import environ
+from threading import Lock
 from typing import Any
 
 import pandas as pd
@@ -35,6 +36,12 @@ HEALTH = """AmlOnlineEndpointTrafficLog | where DeploymentName == '{slot}' and U
 | summarize requests = count(), failed = countif(toint(ResponseCode) >= 500 or toint(ResponseCode) in (408, 429)),
   p95 = percentile(TotalDurationMs, 95), seconds = datetime_diff('second', max(TimeGenerated), min(TimeGenerated))
 | project requests, failed, coalesce(todouble(p95), 0.0), coalesce(todouble(seconds), 0.0) / 60.0"""
+MIRRORED = """AmlOnlineEndpointConsoleLog | where DeploymentName == '{slot}' and Message has 'POST /score'
+| where Message !has '{agreement}' | extend code = toint(extract(@'"POST /score HTTP/[0-9.]+" ([0-9]+)', 1, Message))
+| summarize requests = countif(isnotnull(code)), failed = countif(code >= 500 or code in (408, 429)),
+  p95 = percentile(todouble(extract(@'/score [0-9]+ ([0-9.]+)ms', 1, Message)), 95),
+  seconds = datetime_diff('second', max(TimeGenerated), min(TimeGenerated))
+| project requests, failed, coalesce(todouble(p95), 0.0), coalesce(todouble(seconds), 0.0) / 60.0"""
 
 
 def threaded[**P, T](work: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]:
@@ -50,6 +57,10 @@ def model(found: Any) -> Model:
     return Model(str(found.version), metrics, {k: v for k, v in tags.items() if k in LINEAGE})
 
 
+def source(endpoint: Endpoint, slot: str) -> str:
+    return MIRRORED if endpoint.mirror.get(slot) and not endpoint.live.get(slot) else HEALTH
+
+
 def stamp(found: Any) -> str:
     return str(found.creation_context.created_at.astimezone(UTC).isoformat())
 
@@ -61,7 +72,7 @@ class AzureML:
         self.ml = MLClient(self.credential, environ["AZURE_SUBSCRIPTION_ID"], group, workspace)
         self.logs = LogsQueryClient(self.credential)
         self.name, self.version = environ["AML_ENDPOINT"], environ["ML_COMPONENT_VERSION"]
-        self.feed: tuple[str, pd.DataFrame] = ("", pd.DataFrame())
+        self.feed, self.building = ("", pd.DataFrame()), Lock()
         self.scoring: tuple[str, str, PipelineClient[Any, Any]] | None = None
 
     def target(self) -> tuple[str, str, PipelineClient[Any, Any]]:
@@ -75,20 +86,21 @@ class AzureML:
     @threaded
     def week(self) -> pd.DataFrame:
         asset = self.ml.data.get(FEED, label="latest")
-        if asset.version != self.feed[0]:
-            store, folder = str(asset.path).split("/datastores/")[1].split("/paths/")
-            found: Any = self.ml.datastores.get(store)
-            blobs = ContainerClient(
-                f"https://{found.account_name}.blob.{found.endpoint}", found.container_name, self.credential
-            )
-            read = (
-                blobs.download_blob(f"{folder.rstrip('/')}/{table}.parquet").readall()
-                for table in ("telemetry", "failures")
-            )
-            telemetry, failures = (pd.read_parquet(io.BytesIO(data)) for data in read)
-            as_of = telemetry["timestamp"].max().normalize() + pd.Timedelta(days=1)
-            self.feed = (str(asset.version), features(telemetry, failures, as_of))
-        return self.feed[1]
+        with self.building:
+            if asset.version != self.feed[0]:
+                store, folder = str(asset.path).split("/datastores/")[1].split("/paths/")
+                found: Any = self.ml.datastores.get(store)
+                blobs = ContainerClient(
+                    f"https://{found.account_name}.blob.{found.endpoint}", found.container_name, self.credential
+                )
+                read = (
+                    blobs.download_blob(f"{folder.rstrip('/')}/{table}.parquet").readall()
+                    for table in ("telemetry", "failures")
+                )
+                telemetry, failures = (pd.read_parquet(io.BytesIO(data)) for data in read)
+                as_of = telemetry["timestamp"].max().normalize() + pd.Timedelta(days=1)
+                self.feed = (str(asset.version), features(telemetry, failures, as_of))
+            return self.feed[1]
 
     @threaded
     def score(self, rows: pd.DataFrame, slot: str | None = None) -> Scores:
@@ -137,21 +149,19 @@ class AzureML:
         self.ml.online_endpoints.begin_create_or_update(found).result()
 
     @threaded
-    def traffic(self, slot: str) -> list[Any]:
+    def traffic(self, query: str, slot: str) -> list[Any]:
         result = self.logs.query_resource(
-            self.target()[0], HEALTH.format(slot=slot, agreement=AGREEMENT), timespan=WINDOW
+            self.target()[0], query.format(slot=slot, agreement=AGREEMENT), timespan=WINDOW
         )
         return list((result.tables if isinstance(result, LogsQueryResult) else result.partial_data)[0].rows[0])
 
     async def health(self, slot: str) -> Health:
-        requests, failed, p95, minutes = await self.traffic(slot)
-        champion, agreement = (await self.endpoint()).champion, None
-        if champion not in (None, slot):
+        requests, failed, p95, minutes = await self.traffic(source(found := await self.endpoint(), slot), slot)
+        champion, agreement = found.champion, None
+        if champion not in (None, slot) and requests:
             rows = await self.week()
-            flags = [
-                s.frame["probability"] >= s.threshold
-                for s in (await self.score(rows, slot), await self.score(rows, champion))
-            ]
+            scores = (await self.score(rows, slot), await self.score(rows, champion))
+            flags = [s.frame["probability"] >= s.threshold for s in scores]
             agreement = round(float((flags[0] == flags[1]).mean()), 3)
         return Health(int(requests), int(failed), float(p95), round(float(minutes), 1), agreement)
 
