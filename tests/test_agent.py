@@ -53,6 +53,11 @@ def test_numbers_match_tools(platform: FakePlatform, question: str, tool: str, a
     assert tool != "fleet_risk" or (-1 not in ranked and ranked == sorted(ranked)), response.text
 
 
+def test_model_status_counts_and_promotion_step(platform: FakePlatform) -> None:
+    status = json.loads(asyncio.run(Tools(platform, promotions(platform)).model_status()))
+    assert status["registered_models"][0]["weekly_units"] == "3" and status["promotion"] == "none"
+
+
 def test_retraining_waits_for_approval(platform: FakePlatform) -> None:
     batch = Message("assistant", [*call("start_retraining").contents, *call("model_status").contents])
     agent, _ = setup(platform, "ModelApprover", batch, say("Retraining started."))
