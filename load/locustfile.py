@@ -13,7 +13,7 @@ import time
 from datetime import date
 
 import pandas as pd
-from locust import HttpUser, between, events, task
+from locust import HttpUser, between, constant_pacing, events, task
 from locust.env import Environment
 
 from app.domain.simulator import simulate
@@ -24,6 +24,7 @@ ROWS = features(FEED.telemetry, FEED.failures, pd.Timestamp("2026-10-31")).drop(
 BODY = json.dumps({"rows": ROWS.to_dict("records")})
 STRESS_FAILED = 0.01
 SCORE = "score 40 rows"
+PACE = constant_pacing(10) if os.environ.get("SCENARIO") == "peak" else None
 
 
 def bearer(name: str) -> dict[str, str]:
@@ -32,7 +33,7 @@ def bearer(name: str) -> dict[str, str]:
 
 class EndpointUser(HttpUser):
     host = os.environ.get("SCORING_URL", "")
-    wait_time = between(0.5, 1.5)
+    wait_time = PACE or between(0.5, 1.5)
 
     @task
     def score(self) -> None:
@@ -42,7 +43,7 @@ class EndpointUser(HttpUser):
 
 class FleetUser(HttpUser):
     host = os.environ.get("APP_URL", "")
-    wait_time = between(1, 3)
+    wait_time = PACE or between(1, 3)
 
     @task
     def fleet_risk(self) -> None:
