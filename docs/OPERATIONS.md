@@ -101,29 +101,48 @@ Container Apps, the workspace, Cosmos DB serverless and serverless compute cost 
 
 Azure Advisor, 2026-11-01: one recommendation on Trainyard resources, zone redundancy for `sttrainyardstgswc` (High availability). Not applied: it raises the storage price, and the workspace storage holds only rebuildable data (component code, the synthetic feed, models retrained from it, collected inputs). Like the single endpoint instance (ADR-005), no zone redundancy is a Reliability trade-off for cost: recovery is the rebuild from Bicep and the retraining described under *Backup and restore*.
 
-The CI principal calls `/api/fleet/risk` with its own token, so it needs an app role: the sign-in app registration's `Reader` role allows applications and is granted to the staging CI principal, with version 2 access tokens (`08-load-test-reader.sh`, Learn: daemon client applications). `ModelApprover` stays users only. Load tests add their rows to the deployment's collected inputs, so they never run in the day before a monitor run that is meant to read real traffic.
-
-Results: pending, phase 8.: about USD 52 a month at rest in staging and USD 61 in production, mostly the endpoint. Phase 8 compares it with Cost Management, per resource group.
+Estimate: about USD 52 a month at rest in staging and USD 61 in production, mostly the endpoint. Phase 8 compares it with Cost Management, per resource group.
 
 ## Load tests
 
-`load-test.yml`, manual, against staging, before every production promotion. It runs Locust on the endpoint (with `aad_token`) and on `/api/fleet/risk`, which uses no language model:
+`load-test.yml`, manual, against staging, before every production promotion. Locust drives the load on the endpoint (with `aad_token`) and on `/api/fleet/risk`, which uses no language model. REQ-07 and REQ-08 are judged where they are defined: on the endpoint's `AmlOnlineEndpointTrafficLog` for the run's window, every request except the app's agreement probes, failed (`5xx`, `408`, `429`) at most 0.5 % and p95 of `TotalDurationMs` under 500 ms. Locust's own times include the runner's network path to Sweden Central: on 2026-11-03 its score median was 460 ms against the endpoint's 100–130 ms, so they are reported and do not gate. A `424` (`too_few_model_instance`, under 10 ms) is outside the SLI's failure definition; Locust counts it as an error.
 
 | Scenario | Users | Duration | Gate |
 |---|---|---|---|
 | normal | 5 | 5 min | REQ-07 and REQ-08 |
 | peak | 50 | 2 min | REQ-07 and REQ-08 |
-| stress | ramp of 1 user a second up to 300 | until errors exceed 1 % or p95 exceeds 500 ms | none: it finds the breaking point |
+| stress | ramp of 1 user a second up to 300 | until Locust sees errors above 1 %; the job summary lists the endpoint's p95 per minute, where the 500 ms break is read | none: it finds the breaking point |
 | endurance | 10 | 30 min | REQ-07 and REQ-08 |
 | chat | 2 | 2 min | none: it measures the time to first event |
 
 The CI principal calls `/api/fleet/risk` with its own token, so it needs an app role: the sign-in app registration's `Reader` role allows applications and is granted to the staging CI principal, with version 2 access tokens (`08-load-test-reader.sh`, Learn: daemon client applications). `ModelApprover` stays users only. Load tests add their rows to the deployment's collected inputs, so they never run in the day before a monitor run that is meant to read real traffic.
 
-Results: pending, phase 8. Each run's p50, p95, p99, requests per second, errors, peak endpoint CPU and memory, and app replicas go to its job summary and here, with the date.
+Each run's p50, p95, p99, requests per second, errors, peak endpoint CPU and memory, and app replicas go to its job summary and here, with the date.
 
 | Date | Scenario | Result | Causes and changes |
 |---|---|---|---|
 | 2026-11-02 | normal, during a shadow (`green` mirrored at 20 %) | **failed.** Score: 629 requests, 4 × `429`, p95 470 ms. Fleet risk: 170 requests, 14 × `500`, 2 × `429`, p95 1.1 s, maximum 34 s | The endpoint's `429`s are `max_concurrent_requests_exceeded`: one request at a time per instance, the default; now `WORKER_COUNT` 2 and 4 concurrent requests (ADR-005). The fleet's 2 × `429` are those same rejections, passed on as `429` with `Retry-After`. The 14 × `500` came from the sign-in sidecar, which could not forward while the app container was killed twice (exit 137) within 20 s of a scale from zero; every first request downloaded and built the year-long feed at once, at about 87 % of the 1 GiB limit afterwards. Now one build at a time, and 0.75 vCPU with 1.5 GiB. The mirror loads only `green`, not `blue`. To be run again |
+| 2026-11-03 08:27 | normal, before the shadow, only `blue` (model 2, one worker) | **failed.** Score: 641 requests, 6 × `429`, 1 × `424`, p95 470 ms in Locust. Fleet risk: 202 requests, 2 × `429`, no `500`, p95 3.1 s | `blue` still ran the one-worker setting: the `429`s are its rejections. No `500` after the memory fix. To be run again on one deployment with the new setting |
+| 2026-11-03 08:38 | normal, during the shadow (`green`, model 4, two workers, mirrored at 20 %) | **failed.** Score: 638 requests, 5 × `429`, p95 490 ms in Locust. Fleet risk: 225 requests, 3 × `429`, p95 910 ms | Every `429` from `blue`. To be run again |
+| 2026-11-03 09:24 | endurance, through the canary (`green` 10 %) and the promotion (`green` 100 % from 09:30) | **failed on REQ-07.** Endpoint: 9,187 requests, 73 failed (0.79 %), p95 361 ms. Locust: score 5,996 requests, p95 700 ms; fleet risk 3,279, 19 × `429`, 3 × `503`, p95 1.2 s | All 73 failures are `blue`'s `429`s during the canary; `green` had none in 7,468 requests from 09:31 to 09:54, p95 375 ms, which meets both SLAs. The canary split was right: `green` took 11.7 % of 1,660 requests from 09:24 to 09:29 (a 10 % weight). The fleet's 3 × `503` are the endpoint's `424 too_few_model_instance` passed on by the app. Fleet risk p95 is the app's own path (a workspace lookup of the feed version, the scoring call and the runner's network); it carries no SLA |
+| 2026-11-03 10:08 | peak, only `green` (model 4, two workers, four concurrent requests) | **failed on REQ-07 and REQ-08.** Endpoint: 2,558 requests, 1,690 × `429 too_many_pending_request` (66 %), the 200s at p50 about 1 s and p95 about 1.25 s. Locust: score 1,882, fleet risk 661 | Capacity: one DS1_v2 completes about 7 requests of 40 rows a second; 50 users offer about 26 (25 scoring users at about one a second and 25 fleet users, each of whose requests scores once). Below that, at about 5 a second, p95 is 375 ms with no failures. More instances do not fit the DSv2 quota (6 cores for staging, production and one blue/green pair, ADR-005): decision pending |
+
+## KPIs and SLOs, measured
+
+Staging, 2026-11-03 at 10:30 UTC, over its whole life since 2026-11-01, with the workbook's queries (filtered to the staging Application Insights and endpoint in the shared workspace):
+
+| | Value | Cases | Target |
+|---|---|---|---|
+| REQ-07 availability | 99.2 % to 10:05 (95 failed, all `blue`'s `429`s); 86.9 % on 2026-11-03 with the peak run | 11,813 requests to 10:05; 13,551 on 2026-11-03 | ≥ 99.5 % |
+| REQ-08 p95 latency per day | 527 ms on 2026-11-01, 179 ms on 2026-11-02, 947 ms on 2026-11-03 (the peak run) | 5, 815 and 13,551 requests | < 500 ms |
+| Chat errors and duration | 0 errors; p95 13 s for the whole streamed turn | 24 chat turns | errors < 1 %; time to first token is the chat scenario's |
+| KPI-1 model cycle time | median 7.5 min, worst 8.4 min | 5 training runs | ≤ 120 min |
+| KPI-2 drift-to-production lead time | none yet: no promotion followed a breached monitor run | 2 promotions | ≤ 24 h |
+| KPI-3 predictive quality | recall 0.8406 at precision 0.8657 (`training-20261103081438`) | latest matured window | recall ≥ 0.80 at precision ≥ 0.60 |
+| KPI-4 promotion failure rate | 0 % | 2 promotions, 0 rollbacks | ≤ 15 % |
+| KPI-5 planner satisfaction | 100 % | 1 vote | ≥ 80 % |
+
+Measured again at the close of phase 8, after the rollback, the second promotion and the load tests.
 
 ## DORA metrics
 

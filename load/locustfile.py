@@ -4,6 +4,7 @@ The inference endpoint is called with an Entra ID token (`aad_token`) and a real
 simulator and features as the app, from the last week of the staging feed after `firmware-b`, so the rows the load
 writes to the data collector look like the fleet the monitor watches; `/api/fleet/risk` uses no language model, so
 the Container App replicas scale without spending tokens. The chat scenario is two users asking the planner's question.
+Locust's times include the runner's network path; `load-test.yml` judges REQ-07 and REQ-08 at the endpoint instead.
 """
 
 import json
@@ -21,7 +22,7 @@ from ml.features import features
 FEED = simulate(date(2026, 10, 1), 31, firmware_b_from=date(2026, 5, 1))
 ROWS = features(FEED.telemetry, FEED.failures, pd.Timestamp("2026-10-31")).drop(columns="as_of")
 BODY = json.dumps({"rows": ROWS.to_dict("records")})
-SLA_P95_MS, SLA_FAILED, STRESS_FAILED = 500, 0.005, 0.01
+STRESS_FAILED = 0.01
 SCORE = "score 40 rows"
 
 
@@ -74,9 +75,8 @@ class ChatUser(HttpUser):
 
 def stop_at_the_break(environment: Environment) -> None:
     total, runner = environment.stats.total, environment.runner
-    p95 = total.get_current_response_time_percentile(0.95) or 0
-    if runner and total.num_requests > 100 and (total.fail_ratio > STRESS_FAILED or p95 > SLA_P95_MS):
-        print(f"Breaking point: {runner.user_count} users, p95 {p95} ms, failed {total.fail_ratio:.2%}")
+    if runner and total.num_requests > 100 and total.fail_ratio > STRESS_FAILED:
+        print(f"Breaking point: {runner.user_count} users, failed {total.fail_ratio:.2%}")
         runner.quit()
 
 
@@ -88,9 +88,5 @@ def on_init(environment: Environment, **_: object) -> None:
 
 @events.quitting.add_listener
 def on_quitting(environment: Environment, **_: object) -> None:
-    scenario, score = os.environ.get("SCENARIO"), environment.stats.get(SCORE, "POST")
-    if scenario in ("normal", "peak", "endurance"):
-        missed = score.num_requests == 0 or score.fail_ratio > SLA_FAILED
-        environment.process_exit_code = int(missed or score.get_response_time_percentile(0.95) >= SLA_P95_MS)
-    elif scenario == "stress":
-        environment.process_exit_code = 0
+    if os.environ.get("SCENARIO") != "chat":
+        environment.process_exit_code = int(environment.stats.get(SCORE, "POST").num_requests == 0)

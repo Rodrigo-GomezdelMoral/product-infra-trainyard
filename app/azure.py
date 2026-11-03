@@ -7,7 +7,7 @@ and raises `NotReadyError` until it serves, and the promotion timer runs the ste
 import asyncio
 import io
 from collections.abc import Callable, Coroutine
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from itertools import takewhile
 from os import environ
 from threading import Lock
@@ -78,7 +78,8 @@ class AzureML:
     def target(self) -> tuple[str, str, PipelineClient[Any, Any]]:
         if self.scoring is None:
             found = self.ml.online_endpoints.get(self.name)
-            policies = [RetryPolicy(), BearerTokenCredentialPolicy(self.credential, "https://ml.azure.com/.default")]
+            token = BearerTokenCredentialPolicy(self.credential, "https://ml.azure.com/.default")
+            policies = [RetryPolicy(retry_on_status_codes=[424]), token]
             uri = str(found.scoring_uri)
             self.scoring = (str(found.id), uri, PipelineClient(uri, policies=policies))
         return self.scoring
@@ -137,9 +138,8 @@ class AzureML:
             self.ml.online_deployments.begin_create_or_update(
                 deployment(self.ml, self.name, slot, version, self.version)
             )
-        raise NotReadyError(
-            f"Model {version} is being deployed to {slot}, about 10 minutes; the promotion then goes on."
-        )
+        first = "the old deployment is deleted, then " if found and found.provisioning_state == "Deleting" else ""
+        raise NotReadyError(f"{datetime.now(UTC):%H:%M} UTC, {slot}: {first}model {version} deploys in about 10 min.")
 
     @threaded
     def route(self, live: dict[str, int], mirror: dict[str, int]) -> None:

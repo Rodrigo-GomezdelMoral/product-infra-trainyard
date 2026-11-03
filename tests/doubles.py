@@ -197,7 +197,9 @@ class Scripted(FunctionInvocationLayer[Any], BaseChatClient[Any]):
         return ChatResponse(messages=[step(messages) if callable(step) else step])
 
     async def updates(self, messages: Sequence[Message]) -> AsyncIterator[ChatResponseUpdate]:
-        yield ChatResponseUpdate(contents=(await self.reply(messages)).messages[0].contents, role="assistant")
+        yield ChatResponseUpdate(contents=(got := (await self.reply(messages)).messages[0].contents), role="assistant")
+        if text := "".join(c.text or "" for c in got if c.type == "text"):
+            yield ChatResponseUpdate(contents=[Content.from_text(text, merge_mode="replace")], role="assistant")
 
     def _inner_get_response(
         self, *, messages: Sequence[Message], stream: bool, options: Mapping[str, Any], **kwargs: Any
