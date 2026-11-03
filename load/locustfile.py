@@ -57,8 +57,8 @@ class ChatUser(HttpUser):
     @task
     def ask(self) -> None:
         started, question = time.perf_counter(), {"message": "Which trains should we inspect this week?"}
-        headers = bearer("APP_TOKEN")
-        with self.client.post("/api/chat", json=question, headers=headers, stream=True, name="chat") as answer:
+        headers, chat = bearer("APP_TOKEN"), self.client.post
+        with chat("/api/chat", json=question, headers=headers, stream=True, catch_response=True, name="chat") as answer:
             chunks = answer.iter_content(chunk_size=None)
             first = next(chunks, b"")
             waited = 1000 * (time.perf_counter() - started)
@@ -72,6 +72,7 @@ class ChatUser(HttpUser):
             )
             for _ in chunks:
                 pass
+            answer.success() if answer.ok and first else answer.failure(f"HTTP {answer.status_code}, empty or failed")
 
 
 def stop_at_the_break(environment: Environment) -> None:

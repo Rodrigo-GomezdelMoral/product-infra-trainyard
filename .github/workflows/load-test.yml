@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: normal (5 users, 5 min), peak (50 at one request every 10 s, 2 min), stress (ramp to the break), endurance (10, 30 min), chat (2, 2 min)
+        description: normal (5 users, 5 min), peak (50 spawned 5 a second, one request every 10 s each, 2 min), stress (ramp to the break), endurance (10, 30 min), chat (2, 2 min)
         type: choice
         options: [normal, peak, stress, endurance, chat]
 
@@ -18,7 +18,7 @@ concurrency:
 jobs:
   locust:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 80
     environment: staging
     permissions:
       contents: read
@@ -69,12 +69,20 @@ jobs:
         run: |
           case "$SCENARIO" in
             normal) users=(-u 5 -r 1 -t 5m EndpointUser FleetUser) ;;
-            peak) users=(-u 50 -r 10 -t 2m EndpointUser FleetUser) ;;
+            peak) users=(-u 50 -r 5 -t 2m EndpointUser FleetUser) ;;
             stress) users=(-u 300 -r 1 -t 20m EndpointUser FleetUser) ;;
             endurance) users=(-u 10 -r 1 -t 30m EndpointUser FleetUser) ;;
             chat) users=(-u 2 -r 1 -t 2m ChatUser) ;;
           esac
           locust -f load/locustfile.py --headless --only-summary --csv "load-$SCENARIO" --html "load-$SCENARIO.html" "${users[@]}"
+
+      - name: Sign in again, since the OIDC client assertion expires 5 minutes after the first sign-in
+        if: always() && env.STARTED != ''
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: REQ-07 and REQ-08 where the SLA is measured, the endpoint's AmlOnlineEndpointTrafficLog
         if: always() && env.STARTED != '' && inputs.scenario != 'chat'
@@ -86,17 +94,21 @@ jobs:
               --arg q "AmlOnlineEndpointTrafficLog | where UserAgent != 'trainyard-agreement' | $1" '{query: $q, timespan: $t}')"
           }
           failed="countif(toint(ResponseCode) >= 500 or toint(ResponseCode) in (408, 429))"
-          for _ in $(seq 30); do
-            [ "$(logs "where TimeGenerated > datetime($ended) - 1m | count")" -gt 0 ] 2>/dev/null && break
-            sleep 30
+          ingestion="partial: it had not settled after 20 minutes" previous=""
+          for _ in $(seq 20); do
+            count="$(logs count || true)" last="$(logs "where TimeGenerated > datetime($ended) - 1m | count" || true)"
+            if [ "${count:-0}" -gt 0 ] 2>/dev/null && [ "${last:-0}" -gt 0 ] && [ "$count" = "$previous" ]; then
+              ingestion="complete: the last minute arrived and the count held for a minute"; break
+            fi
+            previous="$count"; sleep 60
           done
           read -r requests errors p95 <<<"$(logs "summarize count(), $failed, round(percentile(TotalDurationMs, 95))")"
-          echo "Endpoint: $requests requests, $errors failed (5xx, 408, 429), p95 $p95 ms" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Endpoint, ingestion $ingestion: $requests requests, $errors failed (5xx, 408, 429), p95 $p95 ms" | tee -a "$GITHUB_STEP_SUMMARY"
           if [ "$SCENARIO" = stress ]; then
             { echo '```'; logs "summarize requests = count(), failed = $failed, p95 = round(percentile(TotalDurationMs, 95))
               by minute = bin(TimeGenerated, 1m) | order by minute asc"; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            awk -v r="$requests" -v e="$errors" -v p="$p95" 'BEGIN { exit !(r > 0 && e <= ENVIRON["SLA_FAILED"] * r && p + 0 < ENVIRON["SLA_P95_MS"] + 0) }'
+            [[ "$ingestion" == complete* ]] && awk -v r="$requests" -v e="$errors" -v p="$p95" 'BEGIN { exit !(r > 0 && e <= ENVIRON["SLA_FAILED"] * r && p + 0 < ENVIRON["SLA_P95_MS"] + 0) }'
           fi
 
       - name: Capacity from Azure Monitor - endpoint CPU, memory and capacity, app replicas
