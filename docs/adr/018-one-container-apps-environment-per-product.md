@@ -6,10 +6,10 @@
 
 ADR-017 put one environment per Trainyard environment in `germanywestcentral`: `cae-trainyard-stg-gwc`, deployed, and `cae-trainyard-prod-gwc`, which release `v1.0.0` would create. On 2026-11-02 the subscription has two limits, and production cannot get an environment under either:
 
-- **5 environments per subscription.** ARM preflight of `infra/modules/environment.bicep` with concrete values, in `rg-trainyard-prod-swc`, answers `MaxNumberOfGlobalEnvironmentsInSubExceeded`, "cannot have more than 5 Container App Environments", in `germanywestcentral` and in `italynorth` alike. Five exist across the portfolio's products, one of them `cae-trainyard-stg-gwc`. The usages API and the quotas page do not show this limit.
+- **5 environments per subscription.** ARM preflight of `infra/modules/environment.bicep` with concrete values, in `rg-trainyard-prod-swc`, answers `MaxNumberOfGlobalEnvironmentsInSubExceeded`, "cannot have more than 5 Container App Environments", in `germanywestcentral` and in `italynorth` alike. Five exist in the subscription, one of them `cae-trainyard-stg-gwc`. The usages API and the quotas page do not show this limit.
 - **1 environment per region.** The usages API (`Microsoft.App/locations/<region>/usages`, `ManagedEnvironmentCount`) reads 1 of 1 in `germanywestcentral`. ADR-017 read 0 of 5 there on 2026-11-01.
 
-`az deployment group validate` and `what-if` of `infra/main.bicep` see neither limit: the modules take runtime values, and preflight skips a module whose parameters it cannot resolve. Another product's release `v1.0.0` failed this way after its preflight passed. Only a module or a bare resource validated with concrete values reaches the `Microsoft.App` provider. A preflight of `infra/modules/app.bicep` with concrete values succeeds both with the current environment and with `cae-trainyard-env` before it exists, so preflight does not check the environment an app joins either.
+`az deployment group validate` and `what-if` of `infra/main.bicep` see neither limit: the modules take runtime values, and preflight skips a module whose parameters it cannot resolve. Only a module or a bare resource validated with concrete values reaches the `Microsoft.App` provider. A preflight of `infra/modules/app.bicep` with concrete values succeeds both with the current environment and with `cae-trainyard-env` before it exists, so preflight does not check the environment an app joins either.
 
 ## Options
 
@@ -38,6 +38,6 @@ Option 4, the owner's decision, the same for every product in the subscription.
 - **Staging is down during the change,** from the deletion of `ca-trainyard-stg` until `deploy.yml` recreates it after the merge. Cosmos DB, the workspace and the endpoint are untouched, so conversations, checkpoints, models and traffic survive.
 - **Host names change.** The new environment has a new default domain, so `03-login.sh <env>` runs again after the first deployment of each app into it, to register the new sign-in callback.
 - **Removal.** Deleting `rg-trainyard-prod-swc`'s resources deletes the environment and stops staging too. Removing staging deletes only `ca-trainyard-stg`.
-- **Count.** Trainyard uses 1 of the subscription's 5 environments; one per product, the portfolio's four products use 4.
+- **Count.** Trainyard uses 1 of the subscription's 5 environments.
 - **Price.** Unchanged: a Consumption environment costs nothing at rest, and the apps keep their region, so latency and inter-region transfer are as in ADR-017.
 - **Preflight.** Before changing the environment's region or properties, validate `environment.bicep` on its own with concrete values; `main.bicep`'s `validate` and `what-if` will not show either limit.

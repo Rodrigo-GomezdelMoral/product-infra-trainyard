@@ -28,13 +28,19 @@ jobs:
     permissions:
       contents: read
       statuses: read
+      actions: read
     outputs:
       sha: ${{ steps.check.outputs.sha }}
       digest: ${{ steps.check.outputs.digest }}
       tag: ${{ steps.check.outputs.tag }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
       - id: check
-        name: Staging runs this commit's image and the load tests met the SLAs (REQ-07, REQ-08)
+        name: Staging runs this commit's image and the load tests met the SLAs (REQ-07, REQ-08), unless only web, docs or workflows changed
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name || github.ref_name }}
@@ -44,12 +50,39 @@ jobs:
           statuses="$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/status" --jq .statuses)"
           digest="$(jq -r '[.[] | select(.context == "staging-image")][0].description // ""' <<<"$statuses")"
           echo "$TAG: staging image ${digest:-missing}"
-          for scenario in normal peak endurance; do
-            state="$(jq -r --arg c "load-test/$scenario" '[.[] | select(.context == $c)][0].state // "missing"' <<<"$statuses")"
-            echo "load-test/$scenario: $state"
-            [ "$state" = success ] || missing=1
+          promoted="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?event=release&status=success&per_page=100" \
+            --jq '.workflow_runs[].head_branch')"
+          previous=""
+          for release in $(gh release list -R "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 100 \
+            --json tagName,publishedAt --jq 'sort_by(.publishedAt) | .[].tagName'); do
+            [ "$release" != "$TAG" ] || break
+            if grep -qxF "$release" <<< "$promoted"; then previous="$release"; fi
           done
-          [ -n "$digest" ] && [ -z "${missing:-}" ]
+          required=true
+          if [ -n "$previous" ]; then
+            changed="$(git diff --name-only "refs/tags/$previous" "$sha")"
+            echo "Paths changed since $previous, the last release promoted to production:"
+            required=false
+            while IFS= read -r path; do
+              [ -n "$path" ] || continue
+              case "$path" in
+                web/* | docs/* | .github/* | *.md) echo "  exempt  $path" ;;
+                *) echo "  runtime $path"; required=true ;;
+              esac
+            done <<< "$changed"
+          else
+            echo "No earlier release reached production"
+          fi
+          if [ "$required" = true ]; then
+            for scenario in normal peak endurance; do
+              state="$(jq -r --arg c "load-test/$scenario" '[.[] | select(.context == $c)][0].state // "missing"' <<<"$statuses")"
+              echo "load-test/$scenario: $state"
+              [ "$state" = success ] || missing=1
+            done
+          else
+            echo "Load tests not required: only web/, docs/, .github/ or Markdown files changed (ADR-019)"
+          fi
+          [ -n "$digest" ] && [ -z "${missing:-}" ] || exit 1
           { echo "sha=$sha"; echo "digest=$digest"; echo "tag=$TAG"; } >> "$GITHUB_OUTPUT"
 
   production:
