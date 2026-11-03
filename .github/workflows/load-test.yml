@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: normal (5 users, 5 min), peak (50, 2 min), stress (ramp to the break), endurance (10, 30 min), chat (2, 2 min)
+        description: normal (5 users, 5 min), peak (50 at one request every 10 s, 2 min), stress (ramp to the break), endurance (10, 30 min), chat (2, 2 min)
         type: choice
         options: [normal, peak, stress, endurance, chat]
 

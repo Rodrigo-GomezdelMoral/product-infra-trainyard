@@ -1,6 +1,6 @@
 # ADR-005 · One DS1_v2 instance per endpoint, not three
 
-**Status:** accepted · **Date:** 2026-10-31
+**Status:** accepted · **Date:** 2026-10-31 · **Revised:** 2026-11-03 (capacity bound)
 
 ## Context
 
@@ -19,6 +19,7 @@ Learn recommends at least three instances for a highly available online deployme
 ## State
 
 - **Decided.** The promotion workflow creates the deployments in phase 8, where Locust's four scenarios measure whether one instance meets REQ-07 and REQ-08.
+- **Capacity bound, decided by the owner on 2026-11-03.** One instance stays, and REQ-07, REQ-08 and their SLA rows hold up to 5 requests a second of 40 rows. The peak test of 2026-11-03 measured the instance at about 7 such requests a second, with p95 375 ms and no failures at about 5 a second; 50 users at about 26 a second got 66 % `429 too_many_pending_request`. A second instance does not fit the DSv2 quota beside the other environment and a blue/green pair, and a bigger size would change the cost and the quota of both environments. The peak scenario is now 50 users at one request every 10 seconds each, about 5 a second at the endpoint (each fleet request scores once); stress keeps ramping to find the breaking point.
 
 ## Consequences
 

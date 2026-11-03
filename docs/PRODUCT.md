@@ -92,8 +92,8 @@ Human time per model cycle falls from 22–44 hours to **about 15 minutes**, spe
 | REQ-04 | Must | As a model owner I want drift, data quality, predictive quality and latency watched for me | Given a deployed champion, when production inputs drift or quality drops, then the daily monitor flags it, an alert reaches the action group, the workbook shows it and the chat explains it |
 | REQ-05 | Must | As a model owner I want retraining and promotion controlled, so the model never changes by itself | Given a challenger that passed the gate, when I approve, then traffic goes to 10 % with an automatic health check and, after a second approval, to 100 %; a failed health check rolls back automatically, and I can roll back in one step during the window |
 | REQ-06 | Must | As a planner I want this week's inspection list in plain language | Given I am signed in, when I ask which trains to inspect this week, then I get the ranked units within the inspection budget, the 7-day failure probability, the top contributing signals and the model version, and every number equals the tool output |
-| REQ-07 | Must · SLA | As the operator I want the inference API available | Monthly availability of the inference endpoint ≥ 99.5 % |
-| REQ-08 | Must · SLA | As the operator I want inference fast enough for interactive use | p95 latency of the inference endpoint < 500 ms per request of up to 40 rows |
+| REQ-07 | Must · SLA | As the operator I want the inference API available | Monthly availability of the inference endpoint ≥ 99.5 %, at up to 5 requests a second of 40 rows |
+| REQ-08 | Must · SLA | As the operator I want inference fast enough for interactive use | p95 latency of the inference endpoint < 500 ms per request of up to 40 rows, at up to 5 requests a second |
 | REQ-09 | Should | As a user I want to rate answers | 👍 or 👎 on every answer, stored and counted in KPI-5 |
 | REQ-10 | Should | As a user I want to delete my conversations | Deleting a conversation removes it from Cosmos DB at once; all conversations expire after 30 days |
 
@@ -115,8 +115,8 @@ Each KPI is a custom event in Application Insights, sent by the application and 
 
 | | SLA (committed) | SLO (internal) | SLI and source |
 |---|---|---|---|
-| Inference availability | ≥ 99.5 % a month | ≥ 99.7 % | non-failed ÷ all requests, where failed means a 5xx, a 429 or a timeout; `AmlOnlineEndpointTrafficLog` |
-| Inference latency | p95 < 500 ms | p95 < 400 ms | `percentile(TotalDurationMs, 95)` per day, same table; the `RequestLatency_P95` metric for alerts |
+| Inference availability, up to 5 requests a second of 40 rows | ≥ 99.5 % a month | ≥ 99.7 % | non-failed ÷ all requests, where failed means a 5xx, a 429 or a timeout; `AmlOnlineEndpointTrafficLog` |
+| Inference latency, up to 5 requests a second of 40 rows | p95 < 500 ms | p95 < 400 ms | `percentile(TotalDurationMs, 95)` per day, same table; the `RequestLatency_P95` metric for alerts |
 | Chat | none | p95 time to first token < 3 s warm; errors < 1 % | Application Insights requests and dependencies; the cold start from zero is measured and documented |
 | Recovery | | RTO 4 h · RPO 24 h | measured in the restore drill in staging |
 | Unit cost | | per train and month, per retraining cycle, per chat question | `docs/cost.md` |

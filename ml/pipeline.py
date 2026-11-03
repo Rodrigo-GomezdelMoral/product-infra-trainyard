@@ -139,7 +139,7 @@ def monitor(endpoint: str, slot: str, reference: str | None = None) -> MonitorSc
         prediction = PredictionDriftSignal._get_default_prediction_drift_signal()
         signals = {"data-drift-signal": drift, "prediction-drift-signal": prediction, "data-quality-signal": quality}
     definition = MonitorDefinition(
-        compute=ServerlessSparkCompute(instance_type="standard_e4s_v3", runtime_version="3.4"),
+        compute=ServerlessSparkCompute(instance_type="standard_e4s_v3", runtime_version="3.5"),
         monitoring_target=target,
         monitoring_signals=signals,
     )

@@ -17,8 +17,8 @@ Trainyard has two surfaces. The inference endpoint scores the fleet and is alway
 
 | | SLA | SLO | SLI |
 |---|---|---|---|
-| Inference availability | ≥ 99.5 % a month | ≥ 99.7 % | non-failed ÷ all requests in `AmlOnlineEndpointTrafficLog`; failed = 5xx, 408 (timeout) or 429 |
-| Inference latency | p95 < 500 ms | p95 < 400 ms | `percentile(TotalDurationMs, 95)` per day; the `RequestLatency_P95` metric for alerts |
+| Inference availability, up to 5 requests a second of 40 rows | ≥ 99.5 % a month | ≥ 99.7 % | non-failed ÷ all requests in `AmlOnlineEndpointTrafficLog`; failed = 5xx, 408 (timeout) or 429 |
+| Inference latency, up to 5 requests a second of 40 rows | p95 < 500 ms | p95 < 400 ms | `percentile(TotalDurationMs, 95)` per day; the `RequestLatency_P95` metric for alerts |
 | Chat | none | p95 time to first event < 3 s warm; errors < 1 % | App Insights requests; Locust's chat scenario |
 
 - **The workbook** (`infra/workbook.json`) computes each SLI from these sources. `tests/test_infra.py` keeps its queries on these definitions and on the events the app really sends.
