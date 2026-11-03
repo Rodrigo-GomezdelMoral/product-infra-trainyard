@@ -160,8 +160,8 @@ async def chat(
     yield ServerSentEvent(event="conversation", data=session.session_id)
     try:
         async for update in build_agent(wired.chat, tools, who.roles).run(message, stream=True, session=session):
-            if update.text:
-                yield ServerSentEvent(event="text", data=update.text)
+            if new := "".join(c.text or "" for c in update.contents if c.type == "text" and c.merge_mode != "replace"):
+                yield ServerSentEvent(event="text", data=new)
             for c in update.contents:
                 if c.type == "function_approval_request" and c.function_call:
                     call = {"id": c.id, "tool": c.function_call.name, "arguments": c.function_call.parse_arguments()}
