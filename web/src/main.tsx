@@ -128,7 +128,11 @@ function App() {
   function open(item: Conversation) {
     reset(item.id);
     setConversation(item.id);
-    api.turns(item.id).then((turns) => setEntries(turns.map((turn): Entry => (turn.role === "user" ? { kind: "user", ...turn } : { kind: "answer", ...turn }))), fail);
+    const waiting = owner ? api.promotion().catch((): Status => ({ card: null })) : Promise.resolve<Status>({ card: null });
+    Promise.all([api.turns(item.id), waiting]).then(([turns, status]) => {
+      const card: Entry[] = status.card ? [{ kind: "promotion", status }] : [];
+      setEntries([...turns.map((turn): Entry => (turn.role === "user" ? { kind: "user", ...turn } : { kind: "answer", ...turn })), ...card]);
+    }, fail);
   }
   function forget(item: Conversation) {
     api.forget(item.id).then(() => (setConversations((list) => list.filter((other) => other.id !== item.id)), item.id === active && reset()), fail);

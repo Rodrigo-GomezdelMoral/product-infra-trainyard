@@ -42,7 +42,7 @@ class FakePlatform:
     def __init__(self, feed: Feed, endpoint: Endpoint | None = None) -> None:
         self.rows = features(feed.telemetry, feed.failures, WEEK)
         self.state = endpoint or Endpoint({"blue": "2"}, {"blue": 100})
-        champion = {"recall": 0.84, "precision": 0.63}
+        champion = {"recall": 0.84, "precision": 0.63, "weekly_units": 3.0}
         self.registered = [
             Model(
                 "2", champion, LINEAGE | {"data_version": "4", "pipeline_job": "teal_kettle_7", "git_sha": "9d2c4ab"}

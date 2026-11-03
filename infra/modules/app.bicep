@@ -73,7 +73,7 @@ resource app 'Microsoft.App/containerApps@2026-07-01' = {
         {
           name: 'trainyard'
           image: image
-          resources: { cpu: json('0.5'), memory: '1Gi' }
+          resources: { cpu: json('0.75'), memory: '1.5Gi' }
           env: map(items(union(settings, { COSMOS_ENDPOINT: cosmos.properties.documentEndpoint })), item => { name: item.key, value: item.value })
           probes: [
             for kind in ['Startup', 'Liveness', 'Readiness']: {

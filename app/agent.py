@@ -10,7 +10,7 @@ from agent_framework import Agent, SupportsChatGetResponse, tool
 
 from app.domain.fleet import INSPECTION_BUDGET, explain, plan
 from app.platform import Platform, Scores
-from app.promotion import Promotions
+from app.promotion import Promotions, pending
 from app.telemetry import event
 from ml.features import HORIZON
 
@@ -26,7 +26,7 @@ You also help the model owner retrain, promote and roll back the model behind th
   produced it, or about lineage, metrics, traffic or drift, call model_status and name the serving model's training
   job, fleet-feed version and git commit. Never answer such a question from earlier answers.
 - Retraining, promotion and rollback happen only through their tools, after the model owner approves. If you do not
-  have those tools, say that only a model owner can do it.
+  have those tools, say that only a model owner can do it. Never promise an update later: you answer when asked.
 - Trainyard prioritises inspections. It never replaces mandated maintenance or a safety decision. Be brief."""
 
 
@@ -91,10 +91,16 @@ class Tools:
             for slot, version in endpoint.models.items()
         }
         models = [
-            {"version": m.version, **{k: pct(v) for k, v in m.metrics.items()}, **m.tags}
+            {"version": m.version, **{k: f"{v:g}" if k.endswith("units") else pct(v) for k, v in m.metrics.items()}}
+            | m.tags
             for m in await self.platform.models()
         ]
-        return dump(traffic=traffic, registered_models=models, last_monitor_run=await self.platform.monitor())
+        card = pending(head := await self.promotions.head())
+        promotion = (
+            f"{card.step}: waiting for the owner's decision" if card else "a step is running" if head else "none"
+        )
+        monitor = await self.platform.monitor()
+        return dump(traffic=traffic, promotion=promotion, registered_models=models, last_monitor_run=monitor)
 
     async def start_retraining(self) -> str:
         """Retrain: submit prepare, train, evaluate and register on the latest fleet data, on serverless compute."""

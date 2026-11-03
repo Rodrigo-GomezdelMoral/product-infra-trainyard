@@ -24,6 +24,7 @@ from azure.ai.ml.entities import (
     MonitorDefinition,
     MonitoringTarget,
     MonitorSchedule,
+    OnlineRequestSettings,
     PipelineJob,
     PredictionDriftSignal,
     RecurrencePattern,
@@ -35,7 +36,7 @@ from azure.core.exceptions import ResourceNotFoundError
 
 COMPONENTS, STEPS = Path(__file__).parent / "components", ("prep", "train", "evaluate", "register")
 INSTANCE, EXPERIMENT = "Standard_F2s_v2", "trainyard-training"
-FEED, MODEL, MONITOR, SERVING = "fleet-feed", "trainyard-risk", "trainyard-monitor", "Standard_DS1_v2"
+FEED, MODEL, MONITOR, SERVING, WORKERS = "fleet-feed", "trainyard-risk", "trainyard-monitor", "Standard_DS1_v2", 2
 REFERENCE = "trainyard-reference"
 
 
@@ -107,6 +108,8 @@ def deployment(client: MLClient, endpoint: str, slot: str, model: str, version: 
         instance_count=1,
         app_insights_enabled=True,
         data_collector=collector,
+        environment_variables={"WORKER_COUNT": str(WORKERS)},
+        request_settings=OnlineRequestSettings(max_concurrent_requests_per_instance=2 * WORKERS),
     )
 
 
