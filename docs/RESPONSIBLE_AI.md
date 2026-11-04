@@ -2,14 +2,14 @@
 
 Trainyard, following the structure of Microsoft's Responsible AI Impact Assessment template, with a model card for the failure-risk model at the end. **All data in this repository is synthetic** (`data/README.md`).
 
-State on 2026-10-31: the agent, the training pipeline, the gate and the scoring script are implemented and tested locally. Their evaluation is in `docs/evaluation.md`. Nothing is deployed yet; phases 8 and 9 deploy to staging and production.
+State on 2026-11-04: deployed to staging since 2026-11-01 and to production since `v1.0.0` (2026-11-03, 22:26 UTC), each environment serving one gated model. The evaluation is in `docs/evaluation.md`. The drift monitor has never completed a run in either environment: REQ-04's monitor is NOT VERIFIED (ADR-010).
 
 ## 1. System information
 
 | | |
 |---|---|
 | **System name** | Trainyard |
-| **Lifecycle stage** | development; staging and production deployment follow in phases 8 and 9 |
+| **Lifecycle stage** | deployed: staging since 2026-11-01, production since 2026-11-03 (`v1.0.0`) |
 | **Description** | A weekly, explained list of the trains most likely to suffer an air production unit (APU) failure within 7 days, and a governed way to retrain, compare, promote and roll back the model behind it |
 | **Purpose** | Put the workshop's limited inspection capacity, 6 units a week by default, on the units most likely to fail, and make every model change traceable and approved |
 | **Features** | a LightGBM failure-risk model served by a managed online endpoint; per-unit explanations from the model's exact feature contributions; a chat agent on `gpt-5-mini` that chooses tools and writes the explanation; a training pipeline with a gate; a promotion workflow (shadow, canary, promotion, rollback) with the model owner's approvals; daily drift and data-quality monitoring |
@@ -81,7 +81,7 @@ State on 2026-10-31: the agent, the training pipeline, the gate and the scoring 
 - **Training and scoring data:** a synthetic fleet feed. 40 units send 10-minute aggregates of the MetroPT-3 signal schema: seven analogue signals (TP2, TP3, H1, DV_pressure, Reservoirs, Oil_temperature, Motor_current) and six digital ones. The feed comes from a seeded degradation process. MetroPT-3 is cited as the schema reference; its data is not used.
 - **Personal data:**
   - telemetry holds none;
-  - conversations hold only the user's object id and their text, expire after 30 days, and can be deleted at any time (REQ-10);
+  - conversations hold only a 16-character SHA-256 prefix of the user's object id, never the id itself, and their text; they expire after 30 days, and can be deleted at any time (REQ-10);
   - prompts carry no personal data, so the Global Standard deployment may process them in any region (`PRODUCT.md`).
 - **Production data collected by the endpoint:** the model's inputs and outputs. They are stored in that environment's workspace storage and never cross environments (ADR-002, ADR-008).
 
@@ -99,8 +99,8 @@ This summary follows the four stages of Microsoft's guidance for responsible gen
 | Wasted inspections | operating point within the inspection budget at precision ≥ 0.60 | ADR-003 | tested locally |
 | Invented or misattributed numbers | numbers only from tools; per-unit checks | `eval/`, `test_numbers_match_tools` | tested against the real model |
 | Unauthorised model changes | role filtering on the server; `always_require` approval on every change tool | `test_reader_cannot_promote`, `test_retraining_waits_for_approval`, `held` at 100 % | tested against the real model |
-| A bad promotion | shadow on mirrored traffic, a 10 % canary with an automatic health check and rollback, one-step rollback during the window | `test_canary_health_rollback`, `test_shadow_step` | tested with doubles; live in phase 8 |
-| Drift going unnoticed | a daily `MonitorSchedule` with data drift, prediction drift and data quality; an alert; the workbook | phase 8 | pending |
+| A bad promotion | shadow on mirrored traffic, a 10 % canary with an automatic health check and rollback, one-step rollback during the window | `test_canary_health_rollback`, `test_shadow_step` | tested with doubles; live in staging on 2026-11-03 (rollback, canary, promotion; ADR-009) |
+| Drift going unnoticed | a daily `MonitorSchedule` with data drift, prediction drift and data quality; an alert; the workbook; meanwhile, KPI-3 on matured labels in every training run and `model_status`, which never reports drift from a run that did not complete | ADR-010; production's first run (2026-11-04, 03:15 UTC) never started its Spark steps and was cancelled, and the schedule is disabled | **NOT VERIFIED**: no monitor run has completed in either environment, a platform limitation documented in ADR-010 |
 | Over-reliance | explanations with the top contributing signals and the model version; mandated inspections untouched; Trainyard prioritises and never decides | evaluation cases on explanations and on the mandated-inspection refusal | tested against the real model |
 | Harmful content in the chat | the shared deployment's guardrail policy `guardrail-chat` | the deployment's configuration, read on 2026-10-31 | configured on the platform |
 | Prompt injection | change tools absent for a `Reader`; approvals for a model owner | four adversarial cases | tested against the real model |
@@ -113,6 +113,8 @@ This summary follows the four stages of Microsoft's guidance for responsible gen
 - **Privacy and security, and inclusiveness:** Entra ID, managed identities, no keys, data minimisation, and WCAG 2.2 AA for the interface (phase 6).
 
 **Review.** The model owner reviews this assessment with each phase's pull request, and again before `v1.0.0`.
+
+**Language model retirement.** `gpt-5-mini` version `2025-08-07` runs with `NoAutoUpgrade`. The Foundry Models API gives its inference retirement as 2027-07-13 (read on 2026-11-04; Learn's *Foundry Models lifecycle and support policy* names that API as the source). At retirement the deployment stops answering. The plan: by 2027-04-14, about 90 days before, the declared replacement is deployed beside it and `eval/` runs against it with the same 44 cases and thresholds; `CHAT_MODEL_DEPLOYMENT` moves to it through a release only if every check passes, and otherwise the release notes say which check failed.
 
 ## Model card: `trainyard-risk`
 
