@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-05
+
+Documentation only: since `v1.0.1`, only `docs/` and `CHANGELOG.md` changed, so `release.yml` needs the staging deploy of
+the tag's commit but no load test (ADR-019). The API, the model code and the infrastructure are unchanged.
+
+### Added
+
+- **The image rollback drill, measured.** On 2026-11-04 staging went back to `v1.0.0`'s image in 4 min 20 s and forward
+  in 3 min 30 s; production went back to `v1.0.0` in 12 min 29 s and forward to `v1.0.1` in 5 min 3 s, the owner's
+  approval included. Both endpoints kept their model (`docs/OPERATIONS.md`, *Image rollback*).
+
 ## [1.0.1] - 2026-11-04
 
 Documentation, the recorded demo runs, the demo recorder (`ops/`) and workflows only: no runtime path changed since

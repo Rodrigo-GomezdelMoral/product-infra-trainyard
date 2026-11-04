@@ -47,6 +47,17 @@ Each environment has its own identities, workspace, storage, Key Vault, Applicat
 
 The app runs in single revision mode, so each step is a new revision through a full deployment, about 4 minutes; there is no faster path through revision activation. `v*` tags cannot be moved or deleted (ruleset `protect-release-tags`), so the tag a rollback names is the commit that was released.
 
+**Drill, 2026-11-04** (GitHub Actions run times, one drill per environment, from `v1.0.1` back to `v1.0.0` and forward again):
+
+| Step | Run | Started (UTC) | Took |
+|---|---|---|---|
+| Staging to `v1.0.0`'s image (`deploy.yml`, `digest`) | 41908736776 | 20:39:53 | 4 min 20 s |
+| Staging back to `v1.0.1`'s image | 41909446245 | 20:44:23 | 3 min 30 s |
+| Production to `v1.0.0` (`release.yml` on the tag, the owner's approval included) | 41911690911 | 20:58:47 | 12 min 29 s |
+| Production back to `v1.0.1` (the same, approval included) | 41913727279 | 21:11:24 | 5 min 3 s |
+
+Both apps ended on `v1.0.1`'s digest, and each endpoint kept its model: an image rollback leaves the model's traffic as it was. The production rollback is the time to approve plus about 4 minutes of deployment.
+
 ## Alerts and who receives them
 
 Every alert goes to the shared action group `ag-aiplatform-shared`; the budget alerts go to `ALERT_EMAIL_ADDRESS`. The owner receives both.
