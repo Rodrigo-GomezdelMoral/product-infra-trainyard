@@ -19,7 +19,7 @@ Option 3, the owner's decision. The `verify` job of `release.yml`:
 - still requires the `staging-image` status: the tag's commit was deployed to staging on merge, and production takes that digest;
 - finds the previous release: the latest published release, not a draft or a pre-release, published before this tag, whose `release.yml` run on the `release` event succeeded, so it reached production;
 - lists `git diff --name-only` between that release's tag and the tag's commit;
-- exempts only `web/*`, `docs/*`, `.github/*` and `*.md`; any other path, or no earlier release in production, requires the three `load-test/<scenario>` statuses as before.
+- exempts only `web/*`, `docs/*`, `ops/*`, `.github/*` and `*.md`; any other path, or no earlier release in production, requires the three `load-test/<scenario>` statuses as before.
 
 The first release, `v1.0.0`, always needs the load tests on its commit.
 
@@ -27,6 +27,7 @@ The first release, `v1.0.0`, always needs the load tests on its commit.
 
 - **The comparison is with production, not with the last tag.** A release that failed or was never approved does not count, so its runtime changes still need the load tests in the next release.
 - **The web client is exempt, and the app serves it.** A change in `web/` ships inside the same image, but it changes only static files under `web/dist`; the API, the endpoint and the scaling are unchanged. A change to `web/` that needs the backend changes Python as well and so needs the load tests.
+- **Operator scripts are exempt.** `ops/` holds the demo recorder, run from a workstation, and the feed and training submitters the ship action calls. The Dockerfile copies only `app/`, `ml/*.py` and `web/`, so `ops/` never reaches the app image or the endpoint: a change there can change what is trained, which the pipeline's own gate judges, not the serving path the load tests measure. Added on 2026-11-04 for 1.0.1, whose recorder waits on the shadow card correctly.
 - **Workflows are exempt.** A change to `.github/` can change how a deployment runs, not what it deploys; `deploy.yml` still deploys it to staging, and the release still requires the `staging-image` status.
 - **The check needs history.** The job checks out the repository with full history and tags, without persisted credentials, and reads the workflow runs with `actions: read`.
 - The job log lists every changed path as `exempt` or `runtime`, so the decision is visible in the release run.

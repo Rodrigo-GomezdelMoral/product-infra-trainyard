@@ -27,7 +27,7 @@ jobs:
     env:
       RG: rg-trainyard-stg-swc
       SCENARIO: ${{ inputs.scenario }}
-      AUTH_CLIENT_ID: ${{ vars.AUTH_CLIENT_ID }}
+      AUTH_CLIENT_ID: ${{ secrets.AUTH_CLIENT_ID }}
       SLA_P95_MS: 500
       SLA_FAILED: 0.005
     steps:
