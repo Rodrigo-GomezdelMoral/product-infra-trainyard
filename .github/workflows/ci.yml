@@ -60,7 +60,7 @@ jobs:
         env:
           VITE_DEMO_MODE: "true"
         run: |
-          mkdir -p src/demo/runs
+          rm -rf src/demo/runs && mkdir -p src/demo/runs
           cp e2e/runs.json src/demo/runs/e2e.json
           npx vite build
 
