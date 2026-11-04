@@ -44,7 +44,7 @@ jobs:
       RG: rg-trainyard-stg-swc
       IMAGE: product-infra-trainyard
       REQUESTED_DIGEST: ${{ inputs.digest }}
-      AUTH_CLIENT_ID: ${{ vars.AUTH_CLIENT_ID }}
+      AUTH_CLIENT_ID: ${{ secrets.AUTH_CLIENT_ID }}
       ALERT_EMAIL_ADDRESS: ${{ secrets.ALERT_EMAIL_ADDRESS }}
       SHARED_RESOURCE_GROUP: ${{ vars.SHARED_RESOURCE_GROUP }}
       REGISTRY_NAME: ${{ vars.REGISTRY_NAME }}

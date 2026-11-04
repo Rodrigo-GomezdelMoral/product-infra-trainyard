@@ -57,7 +57,7 @@ Publish: ../_scripts/product-infra-trainyard/publish-<branch>.sh
 6. **No notebook is part of the system.**
 7. **Agents and workflows** live in code, with Agent Framework, self-hosted in Container Apps. Never an agent or workflow defined in Foundry.
 8. **Synthetic data only.** MetroPT-3 is cited as the signal schema; its data is not used. The README says so above the fold.
-9. **Authorship** appears only in the README: under the title and in the final *Author* section, the name Rodrigo Martín Gómez del Moral Herranz and, below it, the GitHub (`https://github.com/Rodrigo-GomezdelMoral`), LinkedIn (`https://www.linkedin.com/in/rodrigo-mart%C3%ADn-g%C3%B3mez-del-moral-herranz`) and portfolio (`https://rodrigogomezdelmoralherranz.es`) buttons. `LICENSE` is the standard Apache-2.0 text with no name; no author in package metadata; never an e-mail.
+9. **Authorship** appears only in the README: under the title and in the final *Author* section, the author's full name and, below it, the GitHub (`https://github.com/Rodrigo-GomezdelMoral`), LinkedIn (`https://www.linkedin.com/in/rodrigo-mart%C3%ADn-g%C3%B3mez-del-moral-herranz`) and portfolio (`https://rodrigogomezdelmoralherranz.es`) buttons. `LICENSE` is the standard Apache-2.0 text with no name; no author in package metadata; never an e-mail.
 10. **README** follows the common final-README structure, with no *Quick start* and no local run instructions: the product is tried through the published demo.
 11. **English** in everything the repository contains.
 

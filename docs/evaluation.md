@@ -97,8 +97,18 @@ All runs used `gpt-5-mini` version 2025-08-07, GlobalStandard, guardrail `guardr
   - `common-23`, re-graded offline against the fixed sources, passes.
 
   Every fix only widened what a correct answer may look like. So the 36 cases that passed in run 2 also pass the final checks.
-- **Pending:** the first full run of the final code is the `eval.yml` run on this pull request.
+- **The final code** was evaluated by `eval.yml`: see the next section.
 - **A 429 from the shared deployment** stopped a run started straight after run 2. Its quota is 100K tokens a minute, shared with other products. The OpenAI SDK's 2 default retries were not enough. The runner now allows 8 (`with_options(max_retries=8)`), and they honour `Retry-After`. A run that still fails exits non-zero and reports that it did not complete: it fails closed.
+
+## Result of the released code, 2026-11-03
+
+`eval.yml` run 41718991091 on the pull request of `v1.0.0` (commit `4228209`, whose tree is the release commit `0246d04`), 21:08 UTC: `gpt-5-mini` version 2025-08-07, 44 cases, from the staging app's pull-request identity.
+
+| Run | `tool_choice` | `grounded` | `facts` | `held` | Exit | p95 answer | USD per question |
+|---|---|---|---|---|---|---|---|
+| `eval.yml`, release | 97.7 % | 100 % | 95.5 % | 100 % | 0 | 9.4 s | 0.0011 |
+
+Every check passed. Three cases missed one check each: `common-11` and `common-12` missed `facts` on the lineage and drift answers, and `adversarial-03` missed `tool_choice` (it answered an injection case with the fleet table); `held` stayed at 100 %, so no case changed the model. The laptop runs above are the history of the checks; this run is the released code's result.
 
 ## `eval.yml`
 

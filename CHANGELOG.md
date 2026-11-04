@@ -7,6 +7,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-04
+
+Documentation, the recorded demo runs, the demo recorder (`ops/`) and workflows only: no runtime path changed since
+`v1.0.0`, so the release load tests are not required (ADR-019, which now also exempts `ops/`). It closes the validation of `v1.0.0`.
+
+### Added
+
+- **The published demo.** Runs recorded from the production deployment (`web/src/demo/runs`), replayed by the Pages site
+  with their real timings: the inspection list, a unit's explanation and lineage, the drift question, an approved
+  retraining, a shadow, canary and promotion, and a `Reader` refused.
+- **Production evidence.** Requirements, KPIs and DORA metrics with production values, date and number of cases
+  (README, `docs/OPERATIONS.md`); measured costs per meter (`docs/cost.md`); the released code's evaluation run
+  (`docs/evaluation.md`); the language model's retirement date and replacement plan (`docs/RESPONSIBLE_AI.md`).
+
+### Changed
+
+- **The load-test figures** are those of the release commit `0246d04`: endurance 9,676 requests at 5.38 a second, 0
+  failed, p95 389 ms; peak 600 requests, 0 failed, p95 429 ms; normal 852 requests, 0 failed, p95 226 ms. The `6d091cf`
+  runs stay as history in `docs/OPERATIONS.md`.
+- **The chat SLO** is reported on the whole streamed turn until the first event is instrumented (ADR-014).
+- **`AUTH_CLIENT_ID`** is read from an environment secret, so GitHub masks it in every log line.
+- **Dependabot** ignores major bumps of the `node` image and major and minor bumps of the `python` image.
+
+### Fixed
+
+- **The demo recorder waited forever on the shadow.** The shadow card keeps the readiness it was asked with and the app
+  measures it again only when the owner answers, so `ops/record.py` now stops waiting after 30 minutes and answers
+  Start canary again each minute while the app asks for the shadow again.
+- **Stale state lines** that said production was not deployed (`docs/OPERATIONS.md`, `docs/THREAT_MODEL.md`,
+  `docs/RESPONSIBLE_AI.md`, README); the run-failed alert's description, which is split by run, not by experiment, and
+  its blind spot for runs that never leave Queued; the first production deployment's prerequisites, which made the
+  `v1.0.0` run fail twice; conversations keep a SHA-256 prefix of the object id, not the id.
+
+### Security
+
+- **Dependabot assessment.** The 29 alerts on `mlflow==2.22.5` and `pyarrow==19.0.1` are assessed one by one and
+  dismissed with their reason: 24 affect code Trainyard never runs, 5 touch only its own gated artifacts (ADR-011).
+- **Release tags** `v*` cannot be moved or deleted, so production's lineage tag, the release tag, names one commit.
+
+### Known limitations
+
+- **REQ-04 is NOT VERIFIED, a platform limitation.** Production's first monitor run (2026-11-04, 03:15 UTC) stayed
+  Queued for 11 hours: the service submits its preprocessing steps on serverless Spark 3.4 although the schedule asks
+  for 3.5, as in staging. The run was cancelled and the schedule disabled; KPI-2 cannot be measured (ADR-010).
+- **Next runtime release:** the Application Insights daily cap and sampling in Bicep, a digest check in
+  `load-test.yml`, the ML base image pinned by digest, the endpoint's telemetry and cloud role name, the chat's
+  first-event measurement, and Dependabot PRs #3 and #6.
+
 ## [1.0.0] - 2026-11-03
 
 The first release: 7-day failure risk for a fleet of 40 electric multiple units, and a model lifecycle the model owner
