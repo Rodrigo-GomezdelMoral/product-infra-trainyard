@@ -1,6 +1,6 @@
 # Operations
 
-How Trainyard is run, changed, recovered and paid for. State on 2026-11-01: staging is deployed and serves a model; production is not deployed yet. Every measured figure below carries its date, window and number of cases.
+How Trainyard is run, changed, recovered and paid for. State on 2026-11-04: staging is deployed since 2026-11-01 and production since `v1.0.0` (2026-11-03, 22:26 UTC); both run the same image, `sha256:6ac91b788415…`, and each endpoint serves one model. Every measured figure below carries its date, window and number of cases.
 
 ## Environments
 
@@ -11,8 +11,8 @@ How Trainyard is run, changed, recovered and paid for. State on 2026-11-01: stag
 | Container Apps environment | `cae-trainyard-env`, joined | `cae-trainyard-env`, Germany West Central, declared in this group (ADR-018) |
 | Container App | `ca-trainyard-stg`, 0 to 2 replicas | `ca-trainyard-prod`, 0 to 3 replicas |
 | Endpoint | `ep-trainyard-stg`, 1 × `Standard_DS1_v2` while a deployment exists | `ep-trainyard-prod`, the same |
-| Monitor | on demand | daily at 03:15 UTC |
-| Budget | USD 60, alerts at 80 % actual and 100 % forecast | USD 80, the same |
+| Monitor | on demand | daily at 03:15 UTC; disabled since 2026-11-04, because no run starts (REQ-04, ADR-010) |
+| Budget | 60 in the billing currency (EUR), alerts at 80 % actual and 100 % forecast | 80 EUR, the same |
 
 Each environment has its own identities, workspace, storage, Key Vault, Application Insights, Cosmos DB and Container App. Both apps share one Container Apps environment, `cae-trainyard-env`: the subscription allows 5 environments in all and 1 per region, so production declares it and staging joins it (ADR-018). Everything is in Sweden Central except that environment and the apps, in Germany West Central. Sweden Central allows one Container Apps environment per region, and another product uses it; West Europe refuses new resources from this subscription (ADR-017). Each call from the app to Cosmos DB, the endpoint or the workspace adds a 27 ms round trip. The shared base (registry, Foundry, Log Analytics, action group) belongs to the landing zone.
 
@@ -27,7 +27,10 @@ Each environment has its own identities, workspace, storage, Key Vault, Applicat
   4. registers the four ML components with the image's version (the release tag in production).
 - **The owner's identity scripts** live outside the repository and run once, in order: `00-github.sh` and `01-azure.sh` (setup); `02-shared-access.sh` (deployments and monitoring links in the shared group); `03-login.sh <env>` (the sign-in app registration; run it again after each deployment, because the callback URL follows the app's host name, which changes whenever the app or its environment is recreated); `04-staging-access.sh` (Monitoring Reader in the conditions, and `DEPLOY_STAGING`); `05-registry-link.sh` (`registries/read` and `/write` on the shared registry, which ARM checks at every PUT of a workspace that links it, ADR-007); `06-endpoint-providers.sh` (registers `Microsoft.PolicyInsights` and `Microsoft.Cdn`, and deletes the staging endpoint only if its creation failed); `10-environment.sh` (deletes `ca-trainyard-stg` and `cae-trainyard-stg-gwc`, creates `cae-trainyard-env` from `infra/modules/environment.bicep` with the values `main.bicep` passes, and grants the staging CI principal only `read` and `join/action` on it, ADR-018). The CI principals' roles and conditions change only through these scripts; the workflows create only the role assignments the Bicep declares, within those conditions.
 - **Production** takes the digest that staging runs for the tag's commit. It is refused unless that commit has successful `load-test/normal`, `load-test/peak` and `load-test/endurance` statuses (REQ-07, REQ-08). The one exemption: when every path changed since the last release that reached production is under `web/`, `docs/` or `.github/`, or is a Markdown file, the staging image is still required but the load tests are not; the first release always needs them (ADR-019).
+- **The first production deployment** needs two things the release itself does not create: the sign-in app registration with `AUTH_CLIENT_ID` on the production environment (`03-login.sh production`), and a first `fleet-feed` version in the production workspace. `v1.0.0`'s run 41727110829 (2026-11-03) failed twice for lack of each. Attempt 1 (22:02 UTC, 34 s) stopped at `main.bicepparam` with `BCP333`, an empty `AUTH_CLIENT_ID`: the production environment did not have it yet. Attempt 2 (22:06 to 22:15) deployed the infrastructure and the app (revision created 22:13:09), then stopped at `ml/pipeline.py:76`: "Asset fleet-feed does not exist in workspace mlw-trainyard-prod-swc". The dispatch 41729433631 on `v1.0.0` registered the feed (22:17 to 22:21), and attempt 3 passed (22:22 to 22:26). On a fresh environment, in order: `03-login.sh <env>`; push the tag and dispatch `release.yml` on it with `feed_days` (it deploys the infrastructure and the app and registers the feed, without training); publish the release on that tag, which trains and deploys; run `03-login.sh <env>` again for the callback URL.
+- **`AUTH_CLIENT_ID`** is a secret of each GitHub environment from `v1.0.1`, so GitHub masks it in every log line (before, as a variable, run logs printed it). The variable stays as long as `v1.0.0` is a rollback target: a dispatch on a tag runs that tag's workflow file, and `v1.0.0`'s reads the variable.
 - **Fleet feed operations** (ADR-012) are `workflow_dispatch` inputs of `deploy.yml` and `release.yml`: `feed_days` (days from 2025-11-01) and `firmware_b_from` (the drift scenario). Each one registers a new `fleet-feed` version, logged in the Actions history. Never from a laptop. The staging drift scenario uses `feed_days=365` and `firmware_b_from=2026-05-01`, run on 2026-11-01. A local rehearsal with the same code chose that date: with the shift from May, a retrained model keeps recall 0.90 and Series B recall 0.71 on the new holdout while the current model drops to 0.84 and 0.14, so the gate registers the challenger and the comparison favours it; with the shift from August, too little of it reaches the training window and the challenger fails the gate on Series B (0.14).
+- **Next runtime release** (it needs the release load tests, ADR-019), from the validation of 2026-11-04: the Application Insights daily cap and sampling in `infra/modules/ml.bicep`; a digest check in `load-test.yml`; `ml/environment/Dockerfile` pinned by digest instead of the tag `20261018.v1` (Dependabot #6) and numpy 2.4.6 (#3); the endpoint's telemetry without an instrumentation key and a cloud role name; the chat's first-event measurement (ADR-014).
 - **Urgent patches** go through a `fix/` branch, the same CI and a patch release. They are pre-approved: the owner's approval of the production environment is the change approval.
 
 ## Model promotion and rollback
@@ -40,7 +43,9 @@ Each environment has its own identities, workspace, storage, Key Vault, Applicat
 ## Image rollback
 
 1. Staging: run `deploy.yml` with the earlier image's `digest`.
-2. Production: run `release.yml` on the earlier `v*` tag. The production environment accepts only `v*` tags, with the owner's approval.
+2. Production: run `release.yml` on the earlier `v*` tag. The production environment accepts only `v*` tags, with the owner's approval. A dispatch never retrains. On `v1.0.0`, `verify` finds no earlier promoted release and requires that commit's load-test statuses, which exist.
+
+The app runs in single revision mode, so each step is a new revision through a full deployment, about 4 minutes; there is no faster path through revision activation. `v*` tags cannot be moved or deleted (ruleset `protect-release-tags`), so the tag a rollback names is the commit that was released.
 
 ## Alerts and who receives them
 
@@ -51,7 +56,7 @@ Every alert goes to the shared action group `ag-aiplatform-shared`; the budget a
 | `alert-trainyard-<env>-endpoint-5xx` | any 5xx on the endpoint over 15 minutes | console log (`AmlOnlineEndpointConsoleLog`) → roll traffic back if a canary is live |
 | `alert-trainyard-<env>-endpoint-p95` | `RequestLatency_P95` above 400 ms for 15 minutes | workbook SLA tiles → endpoint metrics by deployment |
 | `alert-trainyard-<env>-app-5xx` | more than 5 server errors from the app in 15 minutes | App Insights failures → `/healthz` → the dependency named in the error |
-| `alert-trainyard-<env>-run-failed` | a failed run in the workspace, split by experiment: a pipeline failure or a monitor breach | workbook → `model_status` in the chat → retrain → promote |
+| `alert-trainyard-<env>-run-failed` | a failed run in the workspace (`AmlRunStatusChangedEvent`, `Status == "Failed"`, split by `RootRunId`: the table has no experiment name), so a pipeline failure or a monitor breach. **Blind spot:** a run that stays Queued or Running never fails and never fires it (ADR-010) | workbook → `model_status` in the chat → retrain → promote |
 | `budget-trainyard-<env>` | 80 % of the month's budget spent, or 100 % forecast | delete the idle endpoint deployment |
 
 A failed canary rolls itself back; investigate it afterwards from the shadow and canary cards and the endpoint metrics by deployment.
@@ -69,6 +74,10 @@ The owner does every step: there is no on-call rotation for a portfolio product.
 
 Azure ML accepts no update to an endpoint whose creation failed ("Please recreate the endpoint"), so the deployment stops before `what-if`. Fix the cause, delete the endpoint (it has no deployment and no traffic) and run the deployment again: the Bicep recreates it. On the first staging deployment the cause was `SubscriptionNotRegistered`: a managed online endpoint needs `Microsoft.PolicyInsights` and `Microsoft.Cdn` registered in the subscription, which Learn's troubleshooting page does not list. `06-endpoint-providers.sh` registers both and deletes the staging endpoint only in that state. Deleting an endpoint is never automatic, because in production it is the SLA surface.
 
+### The stuck monitor run, 2026-11-04
+
+Production's first monitor run started at 03:15 UTC and never started its Spark steps: the service submitted the four `model_data_collector_preprocessor` steps on runtime 3.4 while the schedule reads 3.5, and they stayed Queued with no charged core-seconds, the defect ADR-010 records in staging. No alert fired (the blind spot above). After 11 hours the owner cancelled the run and disabled the schedule (`22-monitor-stop.sh`). REQ-04's monitor is NOT VERIFIED, a documented limitation. The promotion's `watch()` re-creates the schedule enabled whenever a model goes to 100 % or traffic goes back after a rollback, so `22-monitor-stop.sh` runs again after every production promotion or rollback.
+
 ## Backup and restore
 
 - **Cosmos DB:** continuous backup, 7-day tier, which bills no backup storage. Restore to a new account at a point in time, give the app identity its data role there (data-plane role assignments are not restored), then point `COSMOS_ENDPOINT` at it.
@@ -81,7 +90,7 @@ Azure ML accepts no update to an endpoint whose creation failed ("Please recreat
   | `COSMOS_ENDPOINT` set on the Container App (new revision); first read from the restored account: the promotion lease, `GET .../checkpoints/docs/promotion` 200, then the timer's lease writes | 12:33:24 | 1 min 36 s |
   | `COSMOS_ENDPOINT` set back to the staging account; the drill account deleted | 12:38:21 | |
 
-  **RTO:** 13 minutes of work (restore, role, switch), 55 minutes of wall clock from the restore request to the first read, because the owner ran the role script in between; target 4 h. **RPO:** the restore point is chosen to the second within the 7-day window; the restored account held the documents written before 11:36:56, including the promotion lease; target 24 h.
+  **RTO:** 13 minutes of work (restore, role, switch), 55 minutes of wall clock from the restore request to the first read, because the owner ran the role script in between; target 4 h. **RPO:** the restore point is chosen to the second within the 7-day window; the restored account held the documents written before 11:36:56, including the promotion lease; target 24 h. Learn (*Continuous backup with point-in-time restore*, 2026-07-13): in a steady state every mutation is backed up asynchronously within 100 seconds, so the achievable RPO is about 100 seconds, far inside the target. Production is not rehearsed: by design no human holds a data role there, and the staging drill used the same Bicep, tier and procedure.
   **What the drill taught:** the app reports finished training runs once, using a marker kept in the lease document. A restored lease has an older marker, so the app sends `retrain_completed` and `model_evaluated` again for runs it had already reported. The workbook's KPI-1 tile counts each pipeline job once, and every KQL in this document does the same.
 - **Models and data assets** are immutable versions in each workspace. Storage has blob and container soft delete for 7 days.
 - **The workspace** is rebuilt from the Bicep and retrained from its data assets.
@@ -91,7 +100,7 @@ Azure ML accepts no update to an endpoint whose creation failed ("Please recreat
 | To | Do |
 |---|---|
 | Stop the hourly cost of an environment | delete its endpoint deployments; the endpoint, models and data stay |
-| Stop the daily monitor | disable the production `MonitorSchedule` |
+| Stop the daily monitor | `22-monitor-stop.sh` (cancels unfinished runs, disables the production `MonitorSchedule`); again after every production promotion or rollback |
 | Stop deployments to staging | set `DEPLOY_STAGING` to anything but `true` |
 | Switch staging on again | run `deploy.yml`, then promote a model from the chat |
 
@@ -101,7 +110,11 @@ Container Apps, the workspace, Cosmos DB serverless and serverless compute cost 
 
 Azure Advisor, 2026-11-01: one recommendation on Trainyard resources, zone redundancy for `sttrainyardstgswc` (High availability). Not applied: it raises the storage price, and the workspace storage holds only rebuildable data (component code, the synthetic feed, models retrained from it, collected inputs). Like the single endpoint instance (ADR-005), no zone redundancy is a Reliability trade-off for cost: recovery is the rebuild from Bicep and the retraining described under *Backup and restore*. Read again on 2026-11-03 at 20:45 UTC: the same storage recommendation, and zone redundancy for `cae-trainyard-stg-gwc`, a Container Apps environment that no longer exists (staging joined `cae-trainyard-env`, ADR-018); Advisor still lists it from its last assessment, and nothing applies.
 
-Estimate: about USD 52 a month at rest in staging and USD 61 in production, mostly the endpoint. Phase 8 compares it with Cost Management, per resource group.
+Read again on 2026-11-04: the same two staging rows, nothing for production.
+
+Estimate: about USD 52 a month at rest in staging and USD 61 in production, mostly the endpoint. Measured month to date on 2026-11-04 (Cost Management, EUR): staging 6.61, production 0.52; the meters, including two the estimate missed (IP Addresses and the drill's point-in-time restore), are in `cost.md`.
+
+**Telemetry settings.** Both Application Insights components keep the defaults: a daily cap of 100 GB, no ingestion sampling, IP masking on; the shared workspace keeps `AppRequests` 90 days. The build prompt asked for a daily cap, sampling and 30-day retention. Volumes are tiny, so nothing is billed today; the cap and sampling go into `infra/modules/ml.bicep` in the next runtime release (an `infra/` change needs the load tests, ADR-019), and retention belongs to the shared workspace. The endpoint deployments set `app_insights_enabled` with an instrumentation key, but local auth is off on Application Insights, so no endpoint telemetry arrives there; the SLIs read the endpoint's logs in Log Analytics. No cloud role name is set, so every item carries `unknown_service:python3.12`.
 
 ## Load tests
 
@@ -117,7 +130,9 @@ Estimate: about USD 52 a month at rest in staging and USD 61 in production, most
 
 The CI principal calls `/api/fleet/risk` with its own token, so it needs an app role: the sign-in app registration's `Reader` role allows applications and is granted to the staging CI principal, with version 2 access tokens (`08-load-test-reader.sh`, Learn: daemon client applications). `ModelApprover` stays users only. Load tests add their rows to the deployment's collected inputs, so they never run in the day before a monitor run that is meant to read real traffic.
 
-Each run's p50, p95, p99, requests per second, errors, peak endpoint CPU and memory, and app replicas go to its job summary and here, with the date.
+Each run's p50, p95, p99, requests per second, errors, peak endpoint CPU and memory, and app replicas go to its job summary and here, with the date. The rows up to 20:07 on 2026-11-03 are history, on earlier commits; the release commit of `v1.0.0` is `0246d04`, whose three gating runs close the table.
+
+**Known gap (validation, 2026-11-04).** `load-test.yml` writes `load-test/<scenario>` on the dispatching commit without checking that staging runs that commit's digest, and it does not print the digest. For `0246d04` the tested image is `sha256:6ac91b788415…` by timing: staging's only revision, `--0000008`, was created at 21:13:21 and the tests ran from 21:16 to 21:59. In those runs the endpoint's CPU and memory reads came back empty and the app's replicas never passed 1. A digest check is planned for the next runtime release.
 
 | Date | Scenario | Result | Causes and changes |
 |---|---|---|---|
@@ -133,21 +148,55 @@ Each run's p50, p95, p99, requests per second, errors, peak endpoint CPU and mem
 | 2026-11-03 19:19 | endurance, `6d091cf` | **met REQ-07 and REQ-08 at the endpoint; the workflow failed.** Endpoint, 19:19:30 to 19:49:40: 9,680 requests, 5.38 a second, 0 failed, p50 156 ms, p95 399 ms | The judging step ran 30 minutes after `azure/login`, whose OIDC client assertion expires after 5 minutes (`AADSTS700024`), so it read nothing. `load-test.yml` now signs in again after the scenario. To be run again by the release gate |
 | 2026-11-03 20:05 | stress, `6d091cf` | **breaking point at about 35 users.** Locust: 2 of 187 scoring requests `429` (1.07 %). Endpoint, 20:06:10 to 20:06:59: 214 requests, 3 × `429`, p95 820 ms; by 10 s, 4.2 a second at p95 314 ms, 7.1 at 649 ms, 7.4 at 847 ms with the `429`s | The latency SLA breaks at about 7 a second (ADR-005). The run's own endpoint read caught 37 rows, before ingestion finished; `load-test.yml` now waits until the window's last minute has arrived and the count holds, and says when it reads partially |
 | 2026-11-03 20:07 | chat, `6d091cf` | **the workflow failed on a test defect;** Locust's 30 chat entries had 0 failures, p95 about 470 ms; Application Insights, 20:00 to 20:15: 26 chat turns, 0 errors, p95 6.2 s for the whole streamed turn | Locust requires `catch_response=True` on a streamed request used in a `with` block (`LocustError`); `ChatUser` now passes it and marks each answer as a success or a failure itself |
+| 2026-11-03 21:16 | normal, `0246d04` (run 41720361703), only `green` | **passed.** Endpoint: 852 requests in 5 min (2.8 a second), 0 failed, p95 226 ms | the release gate's `load-test/normal` |
+| 2026-11-03 21:24 | peak, `0246d04` (run 41721489186) | **passed.** Endpoint: 600 requests in about 2 min (5 a second), 0 failed, p95 429 ms | Spawning 5 users a second removed the bunching: 0 `429` against 97 on `6d091cf`. p95 meets the 500 ms SLA and misses the 400 ms SLO by 29 ms |
+| 2026-11-03 21:28 | endurance, `0246d04` (run 41722116185) | **passed.** Endpoint: 9,676 requests in 30 min (5.38 a second), 0 failed, p95 389 ms. Locust: 3 × `503` on fleet risk in 9,675 | Both SLAs and the latency SLO met at the load bound. The three `503`s are on the app's path, in Locust only: the endpoint's log has no failure in the window |
 
 ## KPIs and SLOs, measured
 
-Staging, read on 2026-11-03 at 20:40 UTC at the close of phase 8, after the rollback drill, the second promotion of model 4 and the release load tests, over its whole life since 2026-11-01, with the workbook's queries (filtered to the staging Application Insights and endpoint in the shared workspace). Staging is a test bed: its traffic is mostly load tests, including two that searched for the limit on purpose. Production's figures replace these after the release.
+Staging, read on 2026-11-03 at 20:40 UTC at the close of phase 8, after the rollback drill, the second promotion of model 4 and the release load tests, over its whole life since 2026-11-01, with the workbook's queries (filtered to the staging Application Insights and endpoint in the shared workspace). Staging is a test bed: its traffic is mostly load tests, including two that searched for the limit on purpose. Production's figures follow the table.
 
 | | Value | Window and cases | Target |
 |---|---|---|---|
 | REQ-07 availability | 100 % in the endurance run, at 5.38 requests a second; 99.12 % with only `green` serving (the 97 bunched `429`s of the first peak run and the 3 `429`s of stress); 93.09 % over the whole life, which holds the diagnostic peak at 26 a second (1,690 × `429`) and `blue`'s one-worker rejections | 9,680 requests (19:19:30 to 19:49:40); 11,370 (18:59 to 20:40); 27,508 (2026-11-01 to 2026-11-03) | ≥ 99.5 % |
 | REQ-08 p95 latency | 399 ms in the endurance run; per day 527 ms on 2026-11-01, 179 ms on 2026-11-02, 630 ms on 2026-11-03 (both peak runs) | 9,680 requests; 5, 815 and 26,688 requests | < 500 ms |
-| Chat errors and duration | 0 errors; p95 12.3 s for the whole streamed turn | 54 chat turns | errors < 1 %; time to first token is the chat scenario's |
-| KPI-1 model cycle time | median 7.5 min, worst 8.7 min | 6 training runs | ≤ 120 min |
+| Chat errors and duration | 0 errors; p95 12.3 s for the whole streamed turn | 54 chat turns | errors < 1 %; the time to first event is not instrumented, so the chat is reported on the whole turn (ADR-014) |
+| KPI-1 model cycle time | median 7.5 min, worst 8.7 min from the `retrain_completed` events' `duration_minutes`; median 7.6 min, worst 8.8 min on the jobs' own creation-to-end timestamps in the run history, the definition in `PRODUCT.md` | 6 training runs | ≤ 120 min |
 | KPI-2 drift-to-production lead time | not measurable in staging: no monitor run has completed (serverless Spark does not start in this subscription, ADR-010), so no promotion followed a breach | 3 promotions | ≤ 24 h |
 | KPI-3 predictive quality | recall 0.8406 at precision 0.8657 (`training-20261103163556`) | latest matured window | recall ≥ 0.80 at precision ≥ 0.60 |
 | KPI-4 promotion failure rate | 33 %: the one rollback is the drill REQ-05 asks for (model 4, 13:26 UTC), not a failed promotion | 3 promotions, 1 rollback | ≤ 15 % |
 | KPI-5 planner satisfaction | 100 % | 1 vote | ≥ 80 % |
+
+Production, read on 2026-11-04 at 20:05 UTC (validation), from its creation on 2026-11-03 at 22:26 UTC. It has no planners: its use is the release's training run, the owner's approval of the first model and the walk-through below.
+
+| | Value | Window and cases | Target |
+|---|---|---|---|
+| REQ-07 and REQ-08 | 100 %; p95 119 ms on `blue` (model 1) and 112 ms on `green` (model 2) | 1,964 endpoint requests in `AmlOnlineEndpointTrafficLog`, 2026-11-04 16:20 to 20:05 UTC, the owner's walk-through traffic (mirrored requests are not in this table) | ≥ 99.5 %; p95 < 500 ms |
+| App requests and chat | 616 app requests (22:13 to 23:02), 0 failed; 2 chat turns, p95 4.1 s for the whole streamed turn | 2026-11-03 | errors < 1 % |
+| KPI-1 model cycle time | 7.1 min from the event; 7.3 min on the job's timestamps (`training-20261103222555`) | 1 training run, started by the release; model 2 (`training-20261104162614`) registered about 8 min after its approval on 2026-11-04 | ≤ 120 min |
+| KPI-2 drift-to-production lead time | not measurable: no monitor run has completed (ADR-010) | 1 promotion | ≤ 24 h |
+| KPI-3 predictive quality | recall 0.8986 at precision 0.8732 | 1 matured window | recall ≥ 0.80 at precision ≥ 0.60 |
+| KPI-4 promotion failure rate | 50 %: the one rollback is REQ-05's drill (model 2, 17:38 UTC), not a failed promotion | 2 promotions of model 2, 1 rollback (the first model's approval is not a promotion) | ≤ 15 % |
+| KPI-5 planner satisfaction | 100 % | 1 vote, the owner's, in the walk-through | ≥ 80 % |
+
+### Production walk-through, 2026-11-04
+
+Recorded with `ops/record.py` as the published demo (`web/src/demo/runs`); times in UTC from the recorder's log and the endpoint.
+
+| Step | Result |
+|---|---|
+| Fleet feed with firmware-b (`release.yml` dispatch, owner's approval) | success in 5 min, 15:50; `fleet-feed` `20261104154812` |
+| Run 1, the week's inspection list (owner) | EMU 2402 first at 99 %, budget 6; model 1 |
+| Run 2, a unit and its lineage | EMU 2417 at 0 % (threshold 15 %), not flagged; `training-20261103222555`, `fleet-feed` `20261103222125`, tag `v1.0.0` (REQ-01) |
+| Run 3, drift | signals watched; "no monitor run has completed", nothing reported as breached (REQ-04 NOT VERIFIED) |
+| Run 4, retraining approved in the chat | `training-20261104162614` at 16:26; model 2 registered and gated at 16:36 (REQ-02) |
+| Model rollback drill (REQ-05) | model 2 in shadow from 16:49 (20 % mirrored), canary at 10 % at 17:36; Roll back at 17:38: model 1 back at 100 % in 3 s, the challenger removed in 269 s |
+| Run 5, shadow, canary and promotion | model 2's second promotion: shadow card 34 mirrored requests, 0 failed, p95 111 ms; canary at 10 % from 19:38, ready; 100 % and window closed at 19:54, model 1 removed |
+| Run 7, a `Reader` asking to promote | refused, no tool call offered (REQ-05, elevation of privilege) |
+| Feedback and deletion | one thumbs up at 20:00 (REQ-09); one conversation deleted at 20:00 (REQ-10) |
+| Monitor schedule | disabled again at 20:00: each promotion re-creates it enabled (ADR-010) |
+
+The shadow card keeps the readiness it was asked with; the app measures the shadow again only when the owner answers it, so a card that says "not ready" after 30 minutes moves on at the next Start canary. Run 5 begins with "Another promotion is in progress": the recorder was restarted after the first shadow had started, and recorded that promotion from its shadow card on.
 
 ## DORA metrics
 
@@ -157,11 +206,11 @@ Computed from the Actions runs, with `gh run list --workflow <name> --json concl
 - **Change failure rate:** releases followed by an image rollback or a `fix/` release, divided by releases.
 - **Time to restore:** from a failed release, or an alert, to the run that restored service.
 
-Measured in phase 9 on 2026-11-03 at 20:45 UTC, over the project's own history (`deploy.yml` from 2026-10-31 21:44 to 2026-11-03 16:29 UTC, 20 runs; 23 merged pull requests). Production has had no release yet, so its four metrics start with `v1.0.0`; staging's, from the same definitions:
+Measured in phase 9 on 2026-11-03 at 20:45 UTC, over the project's own history (`deploy.yml` from 2026-10-31 21:44 to 2026-11-03 16:29 UTC, 20 runs; 23 merged pull requests). Production's column is read on 2026-11-04 from `v1.0.0` (PR #30 merged 21:09:32 UTC, tag published 22:01:51, production deployed 22:26:04); staging's, from the same definitions:
 
 | Metric | Staging | Production |
 |---|---|---|
-| Deployment frequency | 16 successful `deploy.yml` runs in 2.8 days, about 6 a day (13 on merges, 3 dispatched) | none yet |
-| Lead time for changes | median 5.9 min, worst 7.3 min, from a merge to its successful staging deployment (12 merges that deployed) | none yet |
-| Change failure rate | 19 %: 3 of 16 deployments on merge failed | none yet |
-| Time to restore | median 1.6 h (12.3 h, 1.6 h and 0.5 h) from a failed deployment to the next successful one | none yet |
+| Deployment frequency | 16 successful `deploy.yml` runs in 2.8 days, about 6 a day (13 on merges, 3 dispatched) | 1 release in 1 day (`v1.0.0`, 2026-11-03) |
+| Lead time for changes | median 5.9 min, worst 7.3 min, from a merge to its successful staging deployment (12 merges that deployed) | 77 min from the merge to production; 24 min from the tag, through two failed attempts (see *Delivery*) |
+| Change failure rate | 19 %: 3 of 16 deployments on merge failed | 0 of 1: no image rollback or fix release; the two failed attempts came before the first deployment and changed nothing that served users |
+| Time to restore | median 1.6 h (12.3 h, 1.6 h and 0.5 h) from a failed deployment to the next successful one | no restore needed yet |

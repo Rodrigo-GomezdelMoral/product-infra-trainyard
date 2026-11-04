@@ -1,6 +1,6 @@
 # ADR-014 · An SLA on the inference endpoint, an SLO on the chat
 
-**Status:** accepted · **Date:** 2026-10-31
+**Status:** accepted · **Date:** 2026-10-31 · **Amended:** 2026-11-04, how the chat is reported
 
 ## Context
 
@@ -19,7 +19,7 @@ Trainyard has two surfaces. The inference endpoint scores the fleet and is alway
 |---|---|---|---|
 | Inference availability, up to 5 requests a second of 40 rows | ≥ 99.5 % a month | ≥ 99.7 % | non-failed ÷ all requests in `AmlOnlineEndpointTrafficLog`; failed = 5xx, 408 (timeout) or 429 |
 | Inference latency, up to 5 requests a second of 40 rows | p95 < 500 ms | p95 < 400 ms | `percentile(TotalDurationMs, 95)` per day; the `RequestLatency_P95` metric for alerts |
-| Chat | none | p95 time to first event < 3 s warm; errors < 1 % | App Insights requests; Locust's chat scenario |
+| Chat | none | p95 time to first event < 3 s warm; errors < 1 % | App Insights requests; Locust's chat scenario. The first event is not instrumented yet: see *State* |
 
 - **The workbook** (`infra/workbook.json`) computes each SLI from these sources. `tests/test_infra.py` keeps its queries on these definitions and on the events the app really sends.
 - **Alerts:** metric alerts fire on endpoint 5xx and on `RequestLatency_P95` above 400 ms for 15 minutes.
@@ -28,7 +28,8 @@ Trainyard has two surfaces. The inference endpoint scores the fleet and is alway
 ## State
 
 - **Implemented and tested** (phase 7): the workbook, the alerts and the Locust gate, validated with `what-if`; the gate was run locally against a stub, passing and failing.
-- **Pending:** the measured figures, with date, window and number of requests (phase 8).
+- **Measured:** the endpoint's SLIs, with date, window and number of requests, in `OPERATIONS.md` (*Load tests*, *KPIs and SLOs, measured*).
+- **The chat's time to first event is not measured (validation, 2026-11-04).** Application Insights records only the whole streamed `POST /api/chat`: p95 12.3 s over 54 turns in staging (2026-11-01 to 2026-11-03) and 4.1 s over 2 turns in production (2026-11-03). No span or metric marks the first event, and no chat scenario ran on the release commit. Until a runtime release emits that delay as a measurement, the chat is reported on the whole streamed turn and its errors, and the 3 s target is not claimed.
 
 ## Consequences
 

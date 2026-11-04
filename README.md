@@ -6,11 +6,11 @@ Built by **Rodrigo Martín Gómez del Moral Herranz**
 
 Which trains should we inspect this week, and why? Trainyard answers a rail operator's maintenance planners with the units
 most likely to lose their air compressor in the next 7 days, and lets the model owner retrain, compare, promote and roll back
-the model behind that answer from the same chat. A model cycle that took the customer's ML team 22 to 44 hours now takes
-about 15 minutes of human time: training ran in a median of 7.5 minutes in staging (6 runs, 2026-11-01 to 2026-11-03), and
-every traffic change waits for the owner's approval.
+the model behind that answer from the same chat. A model cycle that took the customer's ML team 22 to 44 hours is estimated
+at about 15 minutes of human time: training ran in a median of 7.5 minutes in staging (6 runs, 2026-11-01 to 2026-11-03) and
+in 7.3 minutes in production, and every traffic change waits for the owner's approval.
 
-**Live demo:** <https://rodrigo-gomezdelmoral.github.io/product-infra-trainyard/> - runs recorded from the deployed system, replayed with their real timings and no backend.
+**Live demo:** <https://rodrigo-gomezdelmoral.github.io/product-infra-trainyard/> - runs recorded from the production deployment, replayed with their real timings and no backend.
 
 > **All data is synthetic.** The fleet, its telemetry and its failures come from a seeded simulator that follows the signal
 > schema of the public MetroPT-3 dataset; MetroPT-3's data is not used. The problem's figures are the customer's estimates.
@@ -38,36 +38,38 @@ starts to drift, and nothing records which model produced which warning.
 - **Changes the model only with the owner's approval.** A shadow on mirrored traffic, a 10 % canary with an automatic health
   check, 100 % after a second approval, and a one-step rollback while the window is open.
 - **Watches the model.** Data drift, prediction drift and data quality against the training data, with an alert and a
-  workbook.
+  workbook. Defined and deployed; no monitor run has completed yet, because the platform never starts its Spark steps
+  (REQ-04 below).
 
 ![The model cycle with Trainyard, in BPMN 2.0: the pipeline, the monitor and the canary run unattended; the owner approves the retraining, the canary and the promotion](docs/images/process-to-be.svg)
 
 ## Requirements
 
-Status on 2026-11-03, in staging. Production is measured after `v1.0.0`.
+Status on 2026-11-04. Staging since 2026-11-01; production since `v1.0.0` (2026-11-03, 22:26 UTC).
 
-| REQ | Must | Status | Evidence |
-|---|---|---|---|
-| REQ-01 | Every prediction traceable | done | `test_register_tags_lineage`; asked "Where does that score come from?", the chat named `training-20261102101927`, `fleet-feed` version `20261101131623` and commit `0b70d87` for the serving model |
-| REQ-02 | Automated training | done | `test_pipeline_builds`, `test_components_local`; 6 pipeline runs on serverless compute, median 7.5 min |
-| REQ-03 | Challenger compared before it serves | done | `test_gate_refuses_worse`, `test_shadow_step`; model 4 in shadow, 147 mirrored requests, 0 failed, p95 about 105 ms |
-| REQ-04 | Drift and quality watched | partly | the schedule, the log alert and the workbook are deployed; the monitor run is **NOT VERIFIED**: serverless Spark does not start in this subscription on runtime 3.4 or 3.5 (ADR-010) |
-| REQ-05 | Controlled promotion and rollback | done | `test_canary_health_rollback`, `test_reader_cannot_promote`; a rollback in the window, then canary at 10 % and promotion to 100 % of model 4 |
-| REQ-06 | This week's inspection list | done | `test_fleet_risk_budget`, `test_numbers_match_tools` |
-| REQ-07 | Availability ≥ 99.5 % a month, up to 5 requests a second of 40 rows | met under load | 100 % over 9,680 requests at 5.38 a second for 30 minutes |
-| REQ-08 | p95 < 500 ms, up to 5 requests a second | met under load | p95 399 ms in the same 30 minutes |
+| REQ | Must | Staging | Production | Evidence |
+|---|---|---|---|---|
+| REQ-01 | Every prediction traceable | done | named in the chat | `test_register_tags_lineage`; asked "Where does that score come from?", the chat named `training-20261102101927`, `fleet-feed` version `20261101131623` and commit `0b70d87` for the serving model; in production (2026-11-04) it named `training-20261103222555`, `fleet-feed` `20261103222125` and the release tag `v1.0.0` (ADR-011) |
+| REQ-02 | Automated training | done | met | `test_pipeline_builds`, `test_components_local`; 6 pipeline runs on serverless compute in staging, median 7.5 min; in production `training-20261103222555`, started by the release, 7.3 min, model 1 gated and registered; a retraining approved in the chat on 2026-11-04 (`training-20261104162614`, firmware-b feed) registered model 2 in 8 min |
+| REQ-03 | Challenger compared before it serves | done | met | `test_gate_refuses_worse`, `test_shadow_step`; model 4 in shadow, 147 mirrored requests, 0 failed, p95 about 105 ms; in production model 2 in shadow at 20 % from 16:49 UTC, 0 failed, p95 105 to 111 ms on the card |
+| REQ-04 | Drift and quality watched | **NOT VERIFIED** | **NOT VERIFIED** | a documented platform limitation. The schedule, the log alert and the workbook are deployed, but no monitor run has ever started its Spark steps: the service submits them on runtime 3.4 although the schedule asks for 3.5, and a step submitted directly on 3.5 did not start either. Production's first run (2026-11-04, 03:15 UTC) stayed Queued for 11 hours at no charge; it was cancelled and the schedule disabled. Meanwhile KPI-3 is measured on matured labels in every training run, and the chat never reports drift from a run that did not complete (ADR-010) |
+| REQ-05 | Controlled promotion and rollback | done | met | `test_canary_health_rollback`, `test_reader_cannot_promote`; a rollback in the window, then canary at 10 % and promotion to 100 % of model 4; in production (2026-11-04) Roll back from the canary put model 1 back at 100 % in 3 s and removed the challenger in 269 s, then model 2 went through shadow, canary and 100 % and the window closed at 19:54 UTC; a `Reader` asking to promote was refused |
+| REQ-06 | This week's inspection list | done | met | `test_fleet_risk_budget`, `test_numbers_match_tools`; in production the week's list (budget 6) put EMU 2402 first at 99 % |
+| REQ-07 | Availability ≥ 99.5 % a month, up to 5 requests a second of 40 rows | met under load | 0 failed in 1,964 | release commit `0246d04`: 0 failed in 11,128 endpoint requests over the normal, peak and endurance runs; 100 % over 9,676 requests at 5.38 a second for 30 minutes; production, 2026-11-04 16:20 to 20:05 UTC: 0 failed in 1,964 endpoint requests (the owner's traffic during the walk-through) |
+| REQ-08 | p95 < 500 ms, up to 5 requests a second | met under load | p95 119 ms | `0246d04`: p95 389 ms in the same 30 minutes, 429 ms at peak, 226 ms at normal load; production on 2026-11-04: p95 119 ms (model 1) and 112 ms (model 2) at light load |
 
 ## KPIs
 
-Staging, read on 2026-11-03 at 20:40 UTC over its whole life since 2026-11-01 (`docs/OPERATIONS.md`).
+Staging read on 2026-11-03 at 20:40 UTC over its whole life since 2026-11-01; production read on 2026-11-04 since 2026-11-03
+(`docs/OPERATIONS.md`). KPI-1 is the events' figure; on the jobs' own timestamps staging gives a median of 7.6 and a worst of 8.8 min.
 
-| KPI | Target | Measured | Cases |
+| KPI | Target | Staging | Production |
 |---|---|---|---|
-| KPI-1 Model cycle time | ≤ 120 min | median 7.5 min, worst 8.7 min | 6 training runs |
-| KPI-2 Drift-to-production lead time | ≤ 24 h | not measurable yet: no monitor run has completed | 3 promotions |
-| KPI-3 Predictive quality at 7 days | recall ≥ 0.80 at precision ≥ 0.60 | recall 0.8406 at precision 0.8657 | latest matured window |
-| KPI-4 Promotion failure rate | ≤ 15 % | 33 %, the one rollback being REQ-05's drill | 3 promotions, 1 rollback |
-| KPI-5 Planner satisfaction | ≥ 80 % | 100 % | 1 vote |
+| KPI-1 Model cycle time | ≤ 120 min | median 7.5 min, worst 8.7 min (6 runs) | 7.1 min (1 run); model 2 on 2026-11-04 registered about 8 min after the approval |
+| KPI-2 Drift-to-production lead time | ≤ 24 h | not measurable: no monitor run has completed | not measurable, as in staging |
+| KPI-3 Predictive quality at 7 days | recall ≥ 0.80 at precision ≥ 0.60 | recall 0.8406 at precision 0.8657 | recall 0.8986 at precision 0.8732 |
+| KPI-4 Promotion failure rate | ≤ 15 % | 33 %, the one rollback being REQ-05's drill (3 promotions) | 50 %, the one rollback being REQ-05's drill in production (2 promotions of model 2, 2026-11-04) |
+| KPI-5 Planner satisfaction | ≥ 80 % | 100 % (1 vote) | 100 % (1 vote, the owner's, in the walk-through of 2026-11-04) |
 
 ## Repo card
 
@@ -80,7 +82,8 @@ Staging, read on 2026-11-03 at 20:40 UTC over its whole life since 2026-11-01 (`
 | **Stack** | Python 3.12, FastAPI, Agent Framework, Azure ML SDK v2; React, TypeScript and Vite with the common chat interface |
 | **Environments and delivery** | local with doubles, staging and production; one image per merge, deployed to staging by digest; a GitHub Release deploys the same digest to production after approval; GitHub Actions with OIDC |
 | **Security** | Entra ID everywhere, managed identities, no secrets, local auth off, app roles checked on the server, `aad_token` on the endpoint |
-| **SLA** | inference availability ≥ 99.5 % and p95 < 500 ms up to 5 requests a second of 40 rows; measured in staging: 100 % and 399 ms |
+| **SLA** | inference availability ≥ 99.5 % and p95 < 500 ms up to 5 requests a second of 40 rows; measured in staging on the release commit `0246d04`: 100 % and p95 389 ms over 30 minutes at 5.38 a second, p95 429 ms at peak |
+| **Accessibility** | WCAG 2.2 AA: axe in CI on the release commit, keyboard flows included, with no serious or critical violation; Lighthouse accessibility 100 on the demo build (2026-11-04) |
 | **Demo** | <https://rodrigo-gomezdelmoral.github.io/product-infra-trainyard/> |
 
 ## Architecture
@@ -111,18 +114,21 @@ flowchart LR
   peak and endurance load tests (ADR-019 exempts later releases that change only the web, documents or workflows).
 - **Model:** promoted inside each environment by the owner, from the chat: shadow, canary, promotion, window.
 - **Load tests** (`load-test.yml`, Locust, staging), judged at the endpoint's `AmlOnlineEndpointTrafficLog`; release
-  commit `6d091cf`, 2026-11-03:
+  commit `0246d04` of `v1.0.0`, 2026-11-03 (earlier runs are history in `docs/OPERATIONS.md`):
 
-| Scenario | Load | Requests | Failed | p50 | p95 | Result |
-|---|---|---|---|---|---|---|
-| normal | 5 users, 5 min, 2.9 a second | 859 | 0 | 102 ms | 238 ms | passed |
-| peak | 50 users, 5.3 a second | 600 | 97 × `429` | 684 ms | 992 ms | failed by bunching: users spawned 10 a second stayed in step; now spawned 5 a second |
-| endurance | 10 users, 30 min, 5.38 a second | 9,680 | 0 | 156 ms | 399 ms | met both SLAs |
-| stress | 1 more user a second | 214 | 3 × `429` | | 820 ms | breaks at about 7 a second |
+| Scenario | Load | Requests | Failed | p95 | Result |
+|---|---|---|---|---|---|
+| normal | 5 users, 5 min, 2.8 a second | 852 | 0 | 226 ms | passed |
+| peak | 50 users spawned 5 a second, 2 min, 5 a second | 600 | 0 | 429 ms | passed: SLA met, 29 ms over the 400 ms SLO |
+| endurance | 10 users, 30 min, 5.38 a second | 9,676 | 0 | 389 ms | passed |
 
-- **SLOs:** inference p95 399 ms against an SLO of 400 ms at the load bound; the chat had 0 errors in 54 turns.
-- **DORA** (staging, 2026-10-31 to 2026-11-03): about 6 deployments a day, lead time from merge to staging median
-  5.9 minutes, change failure rate 19 % (3 of 16), time to restore median 1.6 h. Production starts with `v1.0.0`.
+  The stress scenario, run on `6d091cf` with the same scoring code, breaks the latency SLA at about 7 requests a second.
+- **SLOs:** inference p95 389 ms against an SLO of 400 ms at the load bound, 429 ms at peak. The chat had 0 errors in
+  54 turns in staging, p95 12.3 s for the whole streamed turn; its time to first event is not instrumented yet (ADR-014).
+- **DORA:** staging (2026-10-31 to 2026-11-03) about 6 deployments a day, lead time from merge to staging median
+  5.9 minutes, change failure rate 19 % (3 of 16), time to restore median 1.6 h. Production: `v1.0.0` deployed 77 minutes
+  after its merge, on the third attempt of its run: the first release on a fresh environment needs the sign-in app and a
+  first fleet feed beforehand (`docs/OPERATIONS.md`).
 
 ## Cost
 
@@ -136,7 +142,8 @@ USD a month, Retail Prices API on 2026-10-30 (`docs/cost.md`).
 | **At rest** | **about 52** | **about 61** |
 | **In use** | **about 56** | **about 65** |
 
-Per unit: about USD 1.5 per train a month in production, USD 0.05 of compute per retraining cycle, USD 1.6 per day of
+Measured month to date on 2026-11-04 (Cost Management, EUR): staging 6.61, production 0.52 (`docs/cost.md`). The daily
+monitor costs nothing while it is disabled (REQ-04). Per unit: about USD 1.5 per train a month in production, USD 0.05 of compute per retraining cycle, USD 1.6 per day of
 blue/green and USD 0.002 per chat question. Deleting the endpoint deployments takes an environment to about zero.
 
 ## Well-Architected design
@@ -169,8 +176,12 @@ One app registration per environment, `gh-product-infra-trainyard-<environment>`
 ### GitHub secrets and variables
 
 - Secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_PR_CLIENT_ID`, `ALERT_EMAIL_ADDRESS`.
+- Per environment (`staging`, `production`): the secrets `AZURE_CLIENT_ID` and `AUTH_CLIENT_ID`, the sign-in app
+  registration's client id, which must exist before that environment's first deployment.
 - Variables: `SHARED_RESOURCE_GROUP`, `REGISTRY_NAME`, `FOUNDRY_ACCOUNT_NAME`, `FOUNDRY_PROJECT_NAME`,
-  `CHAT_MODEL_DEPLOYMENT`, `LOG_ANALYTICS_WORKSPACE_NAME`, `ACTION_GROUP_NAME`, `AUTH_CLIENT_ID`, `DEPLOY_STAGING`.
+  `CHAT_MODEL_DEPLOYMENT`, `LOG_ANALYTICS_WORKSPACE_NAME`, `ACTION_GROUP_NAME`, `DEPLOY_STAGING`.
+- The first production release also needs a first `fleet-feed` version: dispatch `release.yml` on the tag with
+  `feed_days` before publishing the release (`docs/OPERATIONS.md`, *Delivery*).
 
 ### Identities
 

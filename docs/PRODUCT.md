@@ -72,7 +72,7 @@ With Trainyard, the machine work runs unattended and the people only decide.
 | 8 | Promote to 100 %, or roll back in one step | Model owner, in the chat | 5 min |
 | 9 | Ask which trains to inspect this week, and why | Maintenance planner, in the chat | 1 min |
 
-Human time per model cycle falls from 22–44 hours to **about 15 minutes**, spent reading the shadow and canary results before the two approvals. Retraining is also requested by every merge that changes the model's code or data (staging) and by every release (production). The model never changes by itself: registration is earned at the gate and every traffic change is approved.
+Human time per model cycle falls from 22–44 hours to **about 15 minutes** (the to-be estimate, not a measurement), spent reading the shadow and canary results before the two approvals. Retraining is also requested by every merge that changes the model's code or data (staging) and by every release (production). The model never changes by itself: registration is earned at the gate and every traffic change is approved.
 
 ![The model cycle to-be with Trainyard, in BPMN 2.0](images/process-to-be.svg)
 
@@ -117,7 +117,7 @@ Each KPI is a custom event in Application Insights, sent by the application and 
 |---|---|---|---|
 | Inference availability, up to 5 requests a second of 40 rows | ≥ 99.5 % a month | ≥ 99.7 % | non-failed ÷ all requests, where failed means a 5xx, a 429 or a timeout; `AmlOnlineEndpointTrafficLog` |
 | Inference latency, up to 5 requests a second of 40 rows | p95 < 500 ms | p95 < 400 ms | `percentile(TotalDurationMs, 95)` per day, same table; the `RequestLatency_P95` metric for alerts |
-| Chat | none | p95 time to first token < 3 s warm; errors < 1 % | Application Insights requests and dependencies; the cold start from zero is measured and documented |
+| Chat | none | p95 time to first token < 3 s warm; errors < 1 % | Application Insights requests and dependencies; the cold start from zero is measured and documented. The first token is not instrumented yet, so the chat is reported on the whole streamed turn and the 3 s target is not claimed (ADR-014, 2026-11-04) |
 | Recovery | | RTO 4 h · RPO 24 h | measured in the restore drill in staging |
 | Unit cost | | per train and month, per retraining cycle, per chat question | `docs/cost.md` |
 
@@ -126,6 +126,6 @@ The SLA applies to the inference endpoint, which is always on. The chat applicat
 ## Data and privacy
 
 - **Telemetry is synthetic equipment data:** 10-minute aggregates per unit of the MetroPT-3 analogue and digital signals, from a seeded degradation process in which air leaks and valve wear raise the compressor's duty cycle and slow pressure recovery in the days before a failure.
-- **Conversations** hold only the user's object id and their text. They expire after 30 days and can be deleted at any time (REQ-10).
+- **Conversations** hold only a 16-character SHA-256 prefix of the user's object id, never the id itself, and their text. They expire after 30 days and can be deleted at any time (REQ-10).
 - **Residency:** data at rest stays in Sweden Central; the app that serves the chat runs in Germany West Central and keeps nothing at rest (ADR-017). Prompts to the language model, a Global Standard deployment, may be processed in any Azure region; this is acceptable because they carry no personal data.
 - **Scope of use:** Trainyard prioritises inspections. It never replaces mandated maintenance or any safety decision.
