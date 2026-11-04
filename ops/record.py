@@ -4,7 +4,7 @@ The owner signs in to staging in a browser and passes that request's `Cookie` he
 keeps the roles the session really has. Every step is a real request, saved with its status, body and duration: the
 run's question; `allow` or `refuse` for the tool calls the last answer asked to approve; `decide <approve|promote|
 rollback|close>`; `wait <shadow|canary|window>`, which reads the promotion card every 30 seconds until it reaches that
-step and is ready, and keeps only the last read. Nothing is edited.
+step and is ready (a shadow: after 30 min; `decide approve` repeats while re-asked), keeps the last read. No edits.
 """
 
 import argparse
@@ -12,7 +12,7 @@ import json
 import os
 import re
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +36,9 @@ def fields(stream: str, event: str) -> list[Any]:
 
 def reached(read: dict[str, Any], step: str) -> bool:
     card = read["json"].get("card") or {}
-    return bool(card.get("step") == step and card.get("facts", {}).get("ready", True))
+    facts, now = card.get("facts", {}), card.get("step")
+    old = now == "shadow" and datetime.fromisoformat(facts["started"]) < datetime.now(UTC) - timedelta(minutes=30)
+    return bool(now == step and (facts.get("ready", True) or old))
 
 
 def record(client: httpx.Client, question: str, steps: list[str]) -> list[dict[str, Any]]:
@@ -50,6 +52,9 @@ def record(client: httpx.Client, question: str, steps: list[str]) -> list[dict[s
             done.append(exchange(client, "POST", "/api/chat", {"conversation": conversation, "approvals": calls}))
         elif verb == "decide":
             done.append(exchange(client, "POST", "/api/promotion", {"decision": word}))
+            while word == "approve" and (done[-1]["json"].get("card") or {}).get("step") == "shadow" and len(done) < 60:
+                time.sleep(60)
+                done.append(exchange(client, "POST", "/api/promotion", {"decision": word}))
         else:
             while not reached(read := exchange(client, "GET", "/api/promotion"), word):
                 time.sleep(30)
