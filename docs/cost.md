@@ -20,7 +20,9 @@ An estimate, not a measurement: Sweden Central, USD, Azure Retail Prices API on 
 
 ## Measured
 
-Cost Management, month to date on 2026-11-04 (EUR, the billing currency, about a day behind), per resource group:
+Cost Management, month to date on 2026-11-10 (EUR, the billing currency, about a day behind), per resource group: staging **16.25**, production **10.58**. Production's figure covers about a week, since its start on 2026-11-03.
+
+By meter, month to date on 2026-11-04:
 
 | Meter | Staging | Production |
 |---|---|---|
