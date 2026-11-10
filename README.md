@@ -15,6 +15,9 @@ p95 of 117 ms (2026-11-10).
 > **All data is synthetic.** The fleet, its telemetry and its failures come from a seeded simulator that follows the signal
 > schema of the public MetroPT-3 dataset; MetroPT-3's data is not used. The problem's figures are the customer's estimates.
 
+Production, 2026-11-10: model 5 as a canary at 10 % of live traffic after 15 health checks, waiting for the owner to promote it to
+100 % or roll it back.
+
 ![The production web on 2026-11-10: model 5 as a canary at 10 % of live traffic after 15 health checks in 15.4 minutes, 11 requests, 0 failed and p95 113 ms, waiting for the owner to promote it to 100 % or roll it back](docs/images/key-moment.png)
 
 ## The problem
@@ -46,21 +49,19 @@ starts to drift, and nothing records which model produced which warning.
   workbook. Defined and deployed; no monitor run has completed yet, because the platform never starts its Spark steps
   (REQ-04 below).
 
+![The model cycle with Trainyard, in BPMN 2.0: the pipeline, the monitor and the canary run unattended; the owner approves the retraining, the canary and the promotion](docs/images/process-to-be.png)
+
 The owner's part of a cycle is three approvals in the chat: the retraining, the canary and the promotion. The pipeline, the
 shadow and the canary's health check run unattended. The ML team's 22 to 44 hours per cycle become about 15 minutes of the
 owner's time, spent reading the shadow and canary results: an estimate of the to-be process, not a measurement.
 
-![The model cycle with Trainyard, in BPMN 2.0: the pipeline, the monitor and the canary run unattended; the owner approves the retraining, the canary and the promotion](docs/images/process-to-be.png)
-
 ## Requirements
 
 Status on 2026-11-10, after the demo recording in production. Staging since 2026-11-01; production since `v1.0.0`
-(2026-11-03), now on `v1.0.2`.
+(2026-11-03), now on `v1.0.2`. Each "take N" on the board is the numbered take of the demo video, recorded in production on
+2026-11-10, that shows the requirement.
 
 ![The requirements board: traceable scores, automated training, comparison before serving, approved promotion and the weekly list met; drift watching dashed, not verified; availability 100 % against 99.5 % and inference time 389 ms against 500 ms; feedback and deletion met; the monitor run and the chat's first-token time left for the next release](docs/images/requirements.png)
-
-Each "take N" on the board is the numbered take of the demo video, recorded in production on 2026-11-10, that shows the
-requirement.
 
 | REQ | Must | Staging | Production | Evidence |
 |---|---|---|---|---|
@@ -70,30 +71,38 @@ requirement.
 | REQ-04 | Drift and quality watched | **NOT VERIFIED** | **NOT VERIFIED** | a documented platform limitation. The schedule, the log alert and the workbook are deployed, but no monitor run has ever started its Spark steps: the service submits them on runtime 3.4 although the schedule asks for 3.5, and a step submitted directly on 3.5 did not start either. Production's first run stayed Queued for 11 hours at no charge; it was cancelled and the schedule disabled. Meanwhile KPI-3 is measured on matured labels in every training run, and the chat never reports drift from a run that did not complete (ADR-010) |
 | REQ-05 | Controlled promotion and rollback | done | met | `test_canary_health_rollback`, `test_reader_cannot_promote`; the rollback drill in production (2026-11-04) put model 1 back at 100 % in 3 s and removed the challenger in 269 s; on 2026-11-10 model 5 passed 15 health checks at 10 % in 15.4 minutes (11 requests, 0 failed, p95 113 ms), went to 100 % on the owner's approval, and closing the window removed model 2; a `Reader` asking to promote was refused |
 | REQ-06 | This week's inspection list | done | met | `test_fleet_risk_budget`, `test_numbers_match_tools`; on 2026-11-10 the week's list, within a budget of 6, put EMU 2402 (series A) first at a 100 % 7-day failure probability, with its top signals and the model version |
-| REQ-07 | Availability ≥ 99.5 % a month, up to 5 requests a second of 40 rows | met under load | met | the SLA table below |
-| REQ-08 | p95 < 500 ms, up to 5 requests a second | met under load | met | the SLA table below |
+| REQ-07 · SLA | Availability ≥ 99.5 % a month, up to 5 requests a second of 40 rows | met under load | met | the SLA table below |
+| REQ-08 · SLA | p95 < 500 ms, up to 5 requests a second | met under load | met | the SLA table below |
+
+The two Shoulds are met too: REQ-09, rating answers (a thumbs up in the production walk-throughs of 2026-11-04 and 2026-11-10,
+counted in the workbook's KPI-5), and REQ-10, deleting conversations (one deleted in production on 2026-11-04; all expire after
+30 days).
 
 The SLAs, measured at the endpoint (`AmlOnlineEndpointTrafficLog`) against what was committed:
 
 | SLA | Committed | Staging, release commit `0246d04`, 2026-11-03 | Production, 30 days to 2026-11-10 |
 |---|---|---|---|
-| Inference availability | ≥ 99.5 % a month, up to 5 requests a second of 40 rows | 100 %: 0 failed in 11,128 requests over the normal, peak and endurance runs | 100 %: 0 failed in 3,043 requests |
-| Inference latency | p95 < 500 ms up to 5 requests a second | p95 389 ms at 5.38 requests a second for 30 minutes; 429 ms at peak | p95 117 ms at the light load of real use |
+| REQ-07 Inference availability | ≥ 99.5 % a month, up to 5 requests a second of 40 rows | 100 %: 0 failed in 11,128 requests over the normal, peak and endurance runs | 100 %: 0 failed in 3,043 requests |
+| REQ-08 Inference latency | p95 < 500 ms up to 5 requests a second | p95 389 ms at 5.38 requests a second for 30 minutes; 429 ms at peak | p95 117 ms at the light load of real use |
 
 ## KPIs
 
-Production read on 2026-11-10 after the demo recording, with the workbook's queries on the Application Insights events;
-staging read on 2026-11-03 at 20:40 UTC over its whole life since 2026-11-01 (`docs/OPERATIONS.md`).
+Read in production on 2026-11-10 after the demo recording, with the workbook's queries on the Application Insights events;
+staging was read on 2026-11-03 at 20:40 UTC over its whole life since 2026-11-01 ([`docs/OPERATIONS.md`](docs/OPERATIONS.md)).
 
 ![The KPI board: cycle time 7.1 min against 120, recall 0.90 against 0.80, precision 0.87 against 0.60 and positive feedback 90 % against 80 % met; promotion failures 33 % against 15 % missed; drift to production not measured](docs/images/kpis.png)
 
-| KPI | Target | Production, 2026-11-10 | Staging, 2026-11-03 |
+| KPI | Target | Measured in production | Cases |
 |---|---|---|---|
-| KPI-1 Model cycle time | ≤ 120 min | median 7.1 min (5 runs) | median 7.5 min, worst 8.7 min (6 runs) |
-| KPI-2 Drift-to-production lead time | ≤ 24 h | not measurable: no monitor run has completed | not measurable, as in production |
-| KPI-3 Predictive quality at 7 days | recall ≥ 0.80 at precision ≥ 0.60, on a holdout of the latest 56 days whose labels have matured | recall 0.8986 at precision 0.8732, the serving models on the same holdout | recall 0.8406 at precision 0.8657 |
-| KPI-4 Promotion failure rate | ≤ 15 % | **33 %**: 1 rollback in 3 promotions, the rollback being REQ-05's drill | 33 %: 1 rollback in 3 promotions, the same drill |
-| KPI-5 Planner satisfaction | ≥ 80 % | 90 %: 9 of 10 votes, from the demo scenario's seeded conversations and the owner's (synthetic use) | 100 % (1 vote) |
+| KPI-1 Model cycle time | ≤ 120 min | median 7.1 min | 5 runs |
+| KPI-2 Drift-to-production lead time | ≤ 24 h | not measurable: no monitor run has completed | 3 promotions, none with a completed monitor run |
+| KPI-3 Predictive quality at 7 days | recall ≥ 0.80 at precision ≥ 0.60 | recall 0.8986 at precision 0.8732 | the serving models on the same holdout, the latest 56 days whose labels have matured |
+| KPI-4 Promotion failure rate | ≤ 15 % | **33 %**, missed: the one rollback is REQ-05's drill | 1 rollback in 3 promotions |
+| KPI-5 Planner satisfaction | ≥ 80 % | 90 % | 9 of 10 votes, from the demo scenario's seeded conversations and the owner's (synthetic use) |
+
+In staging: cycle time median 7.5 min and worst 8.7 min (6 runs); drift-to-production lead time not measurable, as in production;
+recall 0.8406 at precision 0.8657; promotion failure rate 33 %, 1 rollback in 3 promotions, the same drill; planner satisfaction
+100 % (1 vote).
 
 ## Repo card
 
@@ -111,12 +120,12 @@ staging read on 2026-11-03 at 20:40 UTC over its whole life since 2026-11-01 (`d
 
 ## Architecture
 
+![Per environment, the Trainyard app serves the planner and the owner and reaches, with its managed identity, the Machine Learning pipeline, the blue/green endpoint and the monitor, Cosmos DB, Key Vault, Storage and Application Insights; Foundry, the registry, Log Analytics and the action group are shared](docs/images/architecture.png)
+
 Each environment has its own resource group in Sweden Central, and both Container Apps run on the product's Container Apps
 environment in Germany West Central (ADR-017, ADR-018). The app serves FastAPI, the web client and one agent whose numbers come
 from tools; Azure Machine Learning trains on serverless compute, serves the champion from a managed online endpoint with blue
 and green slots, and monitors it. The promotion workflow keeps its checkpoints and the conversations in Cosmos DB.
-
-![Per environment, the Trainyard app serves the planner and the owner and reaches, with its managed identity, the Machine Learning pipeline, the blue/green endpoint and the monitor, Cosmos DB, Key Vault, Storage and Application Insights; Foundry, the registry, Log Analytics and the action group are shared](docs/images/architecture.png)
 
 ![Production's resource group as deployed, in the Azure portal: the online endpoint and its deployment, the smart detector alert rule, the three managed identities, the key vault and the Machine Learning workspace](docs/images/resource-group.png)
 
@@ -124,22 +133,22 @@ and green slots, and monitors it. The promotion workflow keeps its checkpoints a
 
 ### Training: a gated pipeline on serverless compute
 
+![The fleet feed goes through prep, train and evaluate in a serverless pipeline; a gate against the champion rejects the model or registers it with lineage tags for the job, the data and the commit](docs/images/pipeline.png)
+
 The retraining the owner approves in the chat submits one Azure Machine Learning pipeline on serverless compute. It reads the
 latest `fleet-feed` version, prepares the features, trains the classifier, evaluates it against the champion on the same
 holdout, and registers it only if it passes the gate, tagged with its job, data version and commit (ADR-011).
-
-![The fleet feed goes through prep, train and evaluate in a serverless pipeline; a gate against the champion rejects the model or registers it with lineage tags for the job, the data and the commit](docs/images/pipeline.png)
 
 ![The retraining of 2026-11-10 in Azure Machine Learning studio, Completed: the fleet feed, prepare, train, evaluate and gate against the registered model, and register if the gate passed](docs/images/studio-pipeline.png)
 
 ### Promotion: shadow, canary, 100 %
 
+![The champion's traffic is mirrored to a shadow at 20 %; after the owner's approval a canary takes 10 % and can roll back to the champion; after a second approval the challenger serves 100 % with a rollback window, and closing it leaves the new champion](docs/images/promotion.png)
+
 A registered challenger never serves straight away. It first answers a copy of 20 % of live traffic beside the champion; the
 owner reads the comparison and starts a 10 % canary, whose health is checked automatically and which rolls back by itself if
 it fails; a second approval sends it to 100 %, and the champion stays ready for a one-step rollback until the owner closes
 the window (ADR-009). The shadow card shows the readiness measured when it was drawn; *Start canary* measures it again.
-
-![The champion's traffic is mirrored to a shadow at 20 %; after the owner's approval a canary takes 10 % and can roll back to the champion; after a second approval the challenger serves 100 % with a rollback window, and closing it leaves the new champion](docs/images/promotion.png)
 
 ![The production web on 2026-11-10: model 5 in shadow beside model 2, the same recall (89.9 %) and precision (87.3 %) on the holdout, 291 and 60 requests, 0 failed, p95 112 and 100 ms and 100 % agreement](docs/images/shadow-card.png)
 
@@ -149,7 +158,7 @@ The chat's agent only chooses tools and writes the explanation: every number in 
 and a tool that changes the model stops at an approval request that only a `ModelApprover` receives (ADR-001). `eval.yml`
 checks this on every pull request that can change the agent: 44 hand-written cases (common questions, variations, edge cases
 and adversarial prompts such as an injection from a `Reader`), put to the real `gpt-5-mini` against a double of Azure
-Machine Learning with fixed data, and graded by four deterministic checks, with no model as judge (`docs/evaluation.md`).
+Machine Learning with fixed data, and graded by four deterministic checks, with no model as judge ([`docs/evaluation.md`](docs/evaluation.md)).
 
 The released code's result, `eval.yml` run 41718991091 on 2026-11-03:
 
@@ -167,19 +176,19 @@ Three cases missed one check each, two on facts and one on tool choice; no case 
 
 Recorded live in production on 2026-11-10, as the model owner and as a planner (`Reader`):
 
-- **The week's list** (below). "Which trains should we inspect this week?" put EMU 2402 first at a 100 % 7-day failure
+- **The week's list** (below): "Which trains should we inspect this week?" put EMU 2402 first at a 100 % 7-day failure
   probability, within a budget of 6, with its top signals and the model version, and said that Trainyard only prioritises
   inspections and never defers mandated maintenance.
 - **A score and where it comes from** (below): the unit's signals against the fleet median, then the serving model, its
   training job, the fleet-feed version and the release tag.
-- **A planner cannot change the model** (below). Signed in as a `Reader`, "Promote model 2" was refused, and the chat gave
+- **A planner cannot change the model** (below): signed in as a `Reader`, "Promote model 2" was refused, and the chat gave
   the serving model's lineage instead.
-- **Drift, without guessing.** "Is the model drifting?" got "drift cannot be determined": no monitor run has completed
+- **Drift, without guessing:** "Is the model drifting?" got "drift cannot be determined": no monitor run has completed
   (REQ-04), so nothing is reported as breached.
-- **A retraining, a shadow, a canary and 100 %.** Approved in the chat, `training-20261110105947` registered model 5; it
+- **A retraining, a shadow, a canary and 100 %:** approved in the chat, `training-20261110105947` registered model 5; it
   shadowed model 2 with 0 failures and 100 % agreement, passed the canary (the image at the top), went to 100 % and the window
   closed with model 2 removed.
-- **Feedback reaches the KPI.** A thumbs up in the chat appears in the workbook's KPI-5.
+- **Feedback reaches the KPI:** a thumbs up in the chat appears in the workbook's KPI-5.
 
 ![The production web signed in as a Trainyard Reader, a maintenance planner, asked "Which trains should we inspect this week?": one unit on the list, EMU 2402 of series A, at a 100 % 7-day failure probability with its top signals, model version 2 and an inspection budget of 6, and the reminder that Trainyard only prioritises inspections](docs/images/inspection-list.png)
 
@@ -191,29 +200,29 @@ Recorded live in production on 2026-11-10, as the model owner and as a planner (
 
 ![Local code with doubles merges to staging, where the API scales to zero next to the endpoint; after the load test and the owner's approval, a release deploys the same image to production, whose endpoint runs the model canary; the apps environment, the registry with one image and Foundry are shared](docs/images/environments.png)
 
-- **Image:** built once per merge (`YYYYMMDD-<branch>-<sha>`), deployed to staging by digest. A GitHub Release `vX.Y.Z`
-  deploys the digest staging runs to production after the owner's approval, and only when that commit passed the normal,
-  peak and endurance load tests (ADR-019 exempts releases that change only the web, documents, workflows or `ops/`).
-  `v1.0.2` (2026-11-10, documentation only) left both apps on the same digest.
-- **Image rollback:** drilled on 2026-11-04: production back to `v1.0.0`'s image in 12 min 29 s and forward to `v1.0.1` in
+- **Image:** built once per merge (`YYYYMMDD-<branch>-<sha>`) and deployed to staging by digest.
+- **Release:** a GitHub Release `vX.Y.Z` deploys the digest staging runs to production after the owner's approval, and only
+  when that commit passed the normal, peak and endurance load tests (ADR-019 exempts releases that change only the web,
+  documents, workflows or `ops/`). `v1.0.2` (2026-11-10, documentation only) left both apps on the same digest.
+- **Rollback:** drilled on 2026-11-04: production back to `v1.0.0`'s image in 12 min 29 s and forward to `v1.0.1` in
   5 min 3 s, the owner's approval included; each endpoint kept its model.
 - **Model:** promoted inside each environment by the owner, from the chat: shadow at 20 % mirrored traffic, canary at 10 %
   with an automatic health check, 100 %, and a rollback window.
 
 ### Load tests
 
-`load-test.yml` runs Locust against staging and judges REQ-07 and REQ-08 where they are defined, in the endpoint's
-`AmlOnlineEndpointTrafficLog`. The app scales from zero to two replicas; the endpoint is one `Standard_DS1_v2` instance,
-fixed (ADR-005).
-
 ![GitHub Actions starts Locust with 5 users against staging: the Trainyard app, which scales to 2 replicas, and the endpoint's one instance, whose p95 of 216 ms passes the SLA gate with 0 failures](docs/images/loadtest.png)
 
-| Run | Load | Requests | Failed | p50 | p95 | p99 | Replicas, app and endpoint |
+`load-test.yml` runs Locust against staging and judges REQ-07 and REQ-08 where they are defined, in the endpoint's
+`AmlOnlineEndpointTrafficLog`. The app scales from zero to two replicas; the endpoint is one `Standard_DS1_v2` instance,
+fixed (ADR-005). Replicas are the app's and the endpoint's:
+
+| Scenario | Load | p50 | p95 | p99 | Requests/s | Errors | Replicas |
 |---|---|---|---|---|---|---|---|
-| normal, `0246d04`, 2026-11-03 (release gate) | 5 users, 5 min, 2.8 a second | 852 | 0 | 101 ms | 226 ms | 291 ms | 1 and 1 |
-| peak, `0246d04`, 2026-11-03 (release gate) | 50 users spawned 5 a second, 2 min, 5 a second | 600 | 0 | 224 ms | 429 ms | 524 ms | 1 and 1 |
-| endurance, `0246d04`, 2026-11-03 (release gate) | 10 users, 30 min, 5.38 a second | 9,676 | 0 | 152 ms | 389 ms | 510 ms | 1 and 1 |
-| normal, `7301e3b`, 2026-11-10 (demo recording) | 5 users, 5 min, 2.82 a second | 846 | 0 | 102 ms | 216 ms | 284 ms | 1 and 1 |
+| normal, `0246d04`, 2026-11-03 (release gate) | 5 users, 5 min | 101 ms | 226 ms | 291 ms | 2.8 | 0 of 852 | 1 and 1 |
+| peak, `0246d04`, 2026-11-03 (release gate) | 50 users spawned 5 a second, 2 min | 224 ms | 429 ms | 524 ms | 5 | 0 of 600 | 1 and 1 |
+| endurance, `0246d04`, 2026-11-03 (release gate) | 10 users, 30 min | 152 ms | 389 ms | 510 ms | 5.38 | 0 of 9,676 | 1 and 1 |
+| normal, `7301e3b`, 2026-11-10 (demo recording) | 5 users, 5 min | 102 ms | 216 ms | 284 ms | 2.82 | 0 of 846 | 1 and 1 |
 
 The stress scenario, run on `6d091cf` with the same scoring code, breaks the latency SLA at about 7 requests a second.
 
@@ -221,14 +230,12 @@ The stress scenario, run on `6d091cf` with the same scoring code, breaks the lat
 
 ### SLOs and DORA
 
-- **SLOs:**
-  - inference availability, SLO ≥ 99.7 %: 100 % in staging under load (0 failed in 11,128 requests, 2026-11-03) and in
-    production (0 failed in 3,043 requests, 30 days to 2026-11-10);
-  - inference latency, SLO p95 < 400 ms: 389 ms at the load bound in staging, 429 ms at peak (above the SLO, within the
-    SLA), and 117 ms in production at the light load of real use;
-  - the chat: 0 errors in 54 turns in staging, p95 12.3 s for the whole streamed turn; its time to first event is not
-    instrumented yet (ADR-014).
-- **DORA**, from the Actions runs (`docs/OPERATIONS.md`):
+- **SLOs:** inference availability ≥ 99.7 %: 100 % in staging under load (0 failed in 11,128 requests, 2026-11-03) and in
+  production (0 failed in 3,043 requests, 30 days to 2026-11-10); inference latency p95 < 400 ms: 389 ms at the load bound in
+  staging, 429 ms at peak (above the SLO, within the SLA), and 117 ms in production at the light load of real use; the chat: 0
+  errors in 54 turns in staging, p95 12.3 s for the whole streamed turn, and its time to first event is not instrumented yet
+  (ADR-014).
+- **DORA**, from the GitHub Actions runs ([`docs/OPERATIONS.md`](docs/OPERATIONS.md)):
 
 | Metric | Staging, 2026-10-31 to 2026-11-03 | Production, to 2026-11-10 |
 |---|---|---|
@@ -239,17 +246,18 @@ The stress scenario, run on `6d091cf` with the same scoring code, breaks the lat
 
 ## Cost
 
-USD a month, Retail Prices API on 2026-10-30 (`docs/cost.md`).
+USD a month, Retail Prices API on 2026-10-30 ([`docs/cost.md`](docs/cost.md)).
 
 | | Staging | Production |
 |---|---|---|
 | Endpoint, 1 × `Standard_DS1_v2` | 49.57 | 49.57 |
 | Daily monitor (serverless Spark, estimate) | 0, on demand | about 8.5 |
 | Storage, Key Vault, Cosmos DB storage, log alert | about 2 | about 3 |
-| **At rest** | **about 52** | **about 61** |
-| **In use** | **about 56** | **about 65** |
+| At rest | about 52 | about 61 |
+| In use | about 56 | about 65 |
+| Budget (EUR) | 60 | 80 |
 
-Measured month to date on 2026-11-10 (Cost Management, EUR): staging 16.25, production 10.58 (`docs/cost.md`). The daily
+Measured month to date on 2026-11-10 (Cost Management, EUR): staging 16.25, production 10.58 ([`docs/cost.md`](docs/cost.md)). The daily
 monitor costs nothing while it is disabled (REQ-04). Per unit: about USD 1.5 per train a month in production, USD 0.05 of
 compute per retraining cycle, USD 1.6 per day of blue/green and USD 0.002 per chat question. Deleting the endpoint
 deployments takes an environment to about zero.
@@ -260,13 +268,13 @@ deployments takes an environment to about zero.
 |---|---|---|
 | Reliability | SLO, RTO and RPO measured; timeouts, retries and clear `429` answers; probes; a restore drill (13 minutes of work) | one endpoint instance, not three, and no zone redundancy (ADR-005) |
 | Security | per-environment segmentation, managed identities, local auth off, HTTPS and TLS 1.2, pinned supply chain | no private endpoints or managed network, which would add cost |
-| Cost | tags, budgets, replica caps, `max_tokens`, scale to zero, the monitor on demand in staging, cost per unit | an always-on endpoint per environment (ADR-004) |
-| Operational excellence | IaC with `what-if`, build once and deploy by digest, telemetry, shadow, canary and rollback for the model | releases that change only the web, documents, workflows or `ops/` skip the load tests (ADR-019) |
-| Performance efficiency | latency targets and load tests before every release; platform features first | the chat's cold start from zero (ADR-014) |
+| Cost Optimization | tags, budgets, replica caps, `max_tokens`, scale to zero, the monitor on demand in staging, cost per unit | an always-on endpoint per environment (ADR-004) |
+| Operational Excellence | IaC with `what-if`, build once and deploy by digest, telemetry, shadow, canary and rollback for the model | releases that change only the web, documents, workflows or `ops/` skip the load tests (ADR-019) |
+| Performance Efficiency | latency targets and load tests before every release; platform features first | the chat's cold start from zero (ADR-014) |
 
 ## Deploy
 
-Deployments run only through GitHub Actions: a merge to `main` deploys staging (`deploy.yml`, when the variable
+Deployment runs only through GitHub Actions: a merge to `main` deploys staging (`deploy.yml`, when the variable
 `DEPLOY_STAGING` is `true`), and `gh release create vX.Y.Z` deploys production (`release.yml`, after the owner's approval).
 Prerequisites: an Azure subscription with the shared base (registry, Foundry with `gpt-5-mini`, Log Analytics and an action
 group), quota for 6 DSv2 cores in Sweden Central, and the GitHub CLI.
@@ -284,13 +292,13 @@ evaluation against the shared model in `eval.yml`.
 
 ### GitHub secrets and variables
 
-- Secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_PR_CLIENT_ID`, `ALERT_EMAIL_ADDRESS`.
+- Repository secrets: `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_PR_CLIENT_ID` and `ALERT_EMAIL_ADDRESS`.
 - Per environment (`staging`, `production`): the secrets `AZURE_CLIENT_ID` and `AUTH_CLIENT_ID`, the sign-in app
   registration's client id, which must exist before that environment's first deployment.
 - Variables: `SHARED_RESOURCE_GROUP`, `REGISTRY_NAME`, `FOUNDRY_ACCOUNT_NAME`, `FOUNDRY_PROJECT_NAME`,
   `CHAT_MODEL_DEPLOYMENT`, `LOG_ANALYTICS_WORKSPACE_NAME`, `ACTION_GROUP_NAME`, `DEPLOY_STAGING`.
 - The first production release also needs a first `fleet-feed` version: dispatch `release.yml` on the tag with
-  `feed_days` before publishing the release (`docs/OPERATIONS.md`, *Delivery*).
+  `feed_days` before publishing the release ([`docs/OPERATIONS.md`](docs/OPERATIONS.md), *Delivery*).
 
 ### Identities
 
@@ -304,9 +312,11 @@ sign-in app registration carries the `Reader` and `ModelApprover` roles (ADR-006
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md): environments, promotion, rollback, restore, alerts, load tests, KPIs and DORA
 - [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md): STRIDE, each mitigation with its test
 - [`docs/RESPONSIBLE_AI.md`](docs/RESPONSIBLE_AI.md): impact assessment and model card
-- [`docs/evaluation.md`](docs/evaluation.md) and [`docs/cost.md`](docs/cost.md)
-- [`CHANGELOG.md`](CHANGELOG.md) and the [latest release](https://github.com/Rodrigo-GomezdelMoral/product-infra-trainyard/releases/latest)
+- [`docs/evaluation.md`](docs/evaluation.md): the model gate, the agent evaluation and its results
+- [`docs/cost.md`](docs/cost.md): the estimate per environment, the measured cost, unit costs and the alternatives rejected
 - [`docs/adr/`](docs/adr/): the 19 architecture decisions
+- [`CHANGELOG.md`](CHANGELOG.md) and the latest release,
+  [`v1.0.2`](https://github.com/Rodrigo-GomezdelMoral/product-infra-trainyard/releases/tag/v1.0.2) (2026-11-10)
 
 ## Author
 
