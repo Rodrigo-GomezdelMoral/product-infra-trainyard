@@ -1,6 +1,6 @@
 # Operations
 
-How Trainyard is run, changed, recovered and paid for. State on 2026-11-04: staging is deployed since 2026-11-01 and production since `v1.0.0` (2026-11-03, 22:26 UTC); both run the same image, `sha256:6ac91b788415…`, and each endpoint serves one model. Every measured figure below carries its date, window and number of cases.
+How Trainyard is run, changed, recovered and paid for. State on 2026-11-10: staging is deployed since 2026-11-01 and production since `v1.0.0` (2026-11-03, 22:26 UTC); both run `v1.0.2`'s image, `sha256:343fa3a8d69d…`, and each endpoint serves one model (production: model 5 since 2026-11-10). Every measured figure below carries its date, window and number of cases.
 
 ## Environments
 
@@ -159,9 +159,10 @@ Each run's p50, p95, p99, requests per second, errors, peak endpoint CPU and mem
 | 2026-11-03 19:19 | endurance, `6d091cf` | **met REQ-07 and REQ-08 at the endpoint; the workflow failed.** Endpoint, 19:19:30 to 19:49:40: 9,680 requests, 5.38 a second, 0 failed, p50 156 ms, p95 399 ms | The judging step ran 30 minutes after `azure/login`, whose OIDC client assertion expires after 5 minutes (`AADSTS700024`), so it read nothing. `load-test.yml` now signs in again after the scenario. To be run again by the release gate |
 | 2026-11-03 20:05 | stress, `6d091cf` | **breaking point at about 35 users.** Locust: 2 of 187 scoring requests `429` (1.07 %). Endpoint, 20:06:10 to 20:06:59: 214 requests, 3 × `429`, p95 820 ms; by 10 s, 4.2 a second at p95 314 ms, 7.1 at 649 ms, 7.4 at 847 ms with the `429`s | The latency SLA breaks at about 7 a second (ADR-005). The run's own endpoint read caught 37 rows, before ingestion finished; `load-test.yml` now waits until the window's last minute has arrived and the count holds, and says when it reads partially |
 | 2026-11-03 20:07 | chat, `6d091cf` | **the workflow failed on a test defect;** Locust's 30 chat entries had 0 failures, p95 about 470 ms; Application Insights, 20:00 to 20:15: 26 chat turns, 0 errors, p95 6.2 s for the whole streamed turn | Locust requires `catch_response=True` on a streamed request used in a `with` block (`LocustError`); `ChatUser` now passes it and marks each answer as a success or a failure itself |
-| 2026-11-03 21:16 | normal, `0246d04` (run 41720361703), only `green` | **passed.** Endpoint: 852 requests in 5 min (2.8 a second), 0 failed, p95 226 ms | the release gate's `load-test/normal` |
-| 2026-11-03 21:24 | peak, `0246d04` (run 41721489186) | **passed.** Endpoint: 600 requests in about 2 min (5 a second), 0 failed, p95 429 ms | Spawning 5 users a second removed the bunching: 0 `429` against 97 on `6d091cf`. p95 meets the 500 ms SLA and misses the 400 ms SLO by 29 ms |
-| 2026-11-03 21:28 | endurance, `0246d04` (run 41722116185) | **passed.** Endpoint: 9,676 requests in 30 min (5.38 a second), 0 failed, p95 389 ms. Locust: 3 × `503` on fleet risk in 9,675 | Both SLAs and the latency SLO met at the load bound. The three `503`s are on the app's path, in Locust only: the endpoint's log has no failure in the window |
+| 2026-11-03 21:16 | normal, `0246d04` (run 41720361703), only `green` | **passed.** Endpoint: 852 requests in 5 min (2.8 a second), 0 failed, p50 101 ms, p95 226 ms, p99 291 ms | the release gate's `load-test/normal` |
+| 2026-11-03 21:24 | peak, `0246d04` (run 41721489186) | **passed.** Endpoint: 600 requests in about 2 min (5 a second), 0 failed, p50 224 ms, p95 429 ms, p99 524 ms | Spawning 5 users a second removed the bunching: 0 `429` against 97 on `6d091cf`. p95 meets the 500 ms SLA and misses the 400 ms SLO by 29 ms |
+| 2026-11-03 21:28 | endurance, `0246d04` (run 41722116185) | **passed.** Endpoint: 9,676 requests in 30 min (5.38 a second), 0 failed, p50 152 ms, p95 389 ms, p99 510 ms. Locust: 3 × `503` on fleet risk in 9,675 | Both SLAs and the latency SLO met at the load bound. The three `503`s are on the app's path, in Locust only: the endpoint's log has no failure in the window |
+| 2026-11-10 10:06 | normal, `7301e3b` (run 42796157575), for the demo recording | **passed.** Endpoint: 846 requests in 5 min (2.82 a second), 0 failed, p50 102 ms, p95 216 ms, p99 284 ms; at most 1 app replica | The p50 and p99 of the four rows from 2026-11-03 21:16 on were read on 2026-11-10 from `AmlOnlineEndpointTrafficLog` with the workflow's filter, over each run's window |
 
 ## KPIs and SLOs, measured
 
@@ -190,6 +191,17 @@ Production, read on 2026-11-04 at 20:05 UTC (validation), from its creation on 2
 | KPI-4 promotion failure rate | 50 %: the one rollback is REQ-05's drill (model 2, 17:38 UTC), not a failed promotion | 2 promotions of model 2, 1 rollback (the first model's approval is not a promotion) | ≤ 15 % |
 | KPI-5 planner satisfaction | 100 % | 1 vote, the owner's, in the walk-through | ≥ 80 % |
 
+Production, read again on 2026-11-10 after the demo recording, with the workbook's queries. Its use is now the three releases' training runs, the conversations seeded before the recording, and the owner's and a `Reader`'s recorded walk-through below.
+
+| | Value | Window and cases | Target |
+|---|---|---|---|
+| REQ-07 and REQ-08 | 100 %; p95 117 ms | 3,043 endpoint requests, 0 failed, in the 30 days to 2026-11-10 (16 of them the shadow's agreement checks) | ≥ 99.5 %; p95 < 500 ms |
+| KPI-1 model cycle time | median 7.1 min (7.1, 7.6, 7.1, 7.8 and 3.5 min) | 5 training runs: 3 started by the releases, 2 approved in the chat (2026-11-04 and 2026-11-10) | ≤ 120 min |
+| KPI-2 drift-to-production lead time | not measurable: no monitor run has completed (ADR-010) | 3 promotions | ≤ 24 h |
+| KPI-3 predictive quality | recall 0.8986 at precision 0.8732 | the serving models on the same holdout: models 2 and 5 both show 89.9 % and 87.3 % on the shadow card | recall ≥ 0.80 at precision ≥ 0.60 |
+| KPI-4 promotion failure rate | 33 %: the one rollback is REQ-05's drill of 2026-11-04, not a failed promotion | 3 promotions (model 2 twice, model 5 once), 1 rollback | ≤ 15 % |
+| KPI-5 planner satisfaction | 90 % | 10 votes, from the seeded conversations and the owner's: synthetic use | ≥ 80 % |
+
 ### Production walk-through, 2026-11-04
 
 Recorded with `ops/record.py` as the published demo (`web/src/demo/runs`); times in UTC from the recorder's log and the endpoint.
@@ -209,6 +221,24 @@ Recorded with `ops/record.py` as the published demo (`web/src/demo/runs`); times
 
 The shadow card keeps the readiness it was asked with; the app measures the shadow again only when the owner answers it, so a card that says "not ready" after 30 minutes moves on at the next Start canary. Run 5 begins with "Another promotion is in progress": the recorder was restarted after the first shadow had started, and recorded that promotion from its shadow card on.
 
+### Production walk-through, 2026-11-10
+
+Recorded live for the demo video, as the owner and as a `Reader`, after the release of `v1.0.2` (10:37 UTC).
+
+| Step | Result |
+|---|---|
+| Load test in staging | normal on `7301e3b`: 846 requests, 0 failed, p95 216 ms (*Load tests*) |
+| The week's inspection list | EMU 2402 (series A) first at 100 %, budget 6; model 2 (REQ-06) |
+| A unit and its lineage | EMU 2402 flagged (threshold 35 %); model 2, `training-20261104162614`, `fleet-feed` `20261104154812`, tag `v1.0.0` (REQ-01) |
+| A `Reader` asking to promote | refused; the chat gave the serving model's lineage instead (REQ-05) |
+| Drift | "drift cannot be determined": no monitor run has completed (REQ-04 NOT VERIFIED) |
+| Retraining approved in the chat | `training-20261110105947` on `fleet-feed` `20261104154812`; model 5 registered (REQ-02) |
+| Shadow of model 5 | 291 requests on model 2 and 60 mirrored to model 5, 0 failed, p95 112 and 100 ms, 100 % agreement; recall 89.9 % and precision 87.3 % for both on the same holdout (REQ-03) |
+| Canary at 10 % | 15 health checks in 15.4 minutes: 11 requests, 0 failed, p95 113 ms; healthy and ready for 100 % |
+| Promotion and window | model 5 at 100 % on `blue`; Close window removed model 2 (REQ-05) |
+| Feedback | a thumbs up, counted in the workbook's KPI-5 (REQ-09) |
+| Monitor schedule | still disabled after the promotion (read at the end of the day) |
+
 ## DORA metrics
 
 Computed from the Actions runs, with `gh run list --workflow <name> --json conclusion,createdAt,headSha`:
@@ -225,3 +255,12 @@ Measured in phase 9 on 2026-11-03 at 20:45 UTC, over the project's own history (
 | Lead time for changes | median 5.9 min, worst 7.3 min, from a merge to its successful staging deployment (12 merges that deployed) | 77 min from the merge to production; 24 min from the tag, through two failed attempts (see *Delivery*) |
 | Change failure rate | 19 %: 3 of 16 deployments on merge failed | 0 of 1: no image rollback or fix release; the two failed attempts came before the first deployment and changed nothing that served users |
 | Time to restore | median 1.6 h (12.3 h, 1.6 h and 0.5 h) from a failed deployment to the next successful one | no restore needed yet |
+
+Production, read again on 2026-11-10 over its three releases, with the same definitions:
+
+| Metric | Production |
+|---|---|
+| Deployment frequency | 3 releases in 7 days: `v1.0.0` (2026-11-03), `v1.0.1` (2026-11-04) and `v1.0.2` (2026-11-10) |
+| Lead time for changes | 77 min for `v1.0.0` and 18 min for `v1.0.1` (PR #34 merged 20:17:53, deployed 20:35:24 UTC); `v1.0.2` was held on purpose for the demo recording, 5.5 days after its merge, and deployed 7 min after its tag (10:37:46 to 10:44:34 UTC) |
+| Change failure rate | 0 of 3: no fix release; the one image rollback, on 2026-11-04, was the drill in *Image rollback* |
+| Time to restore | none needed; the drill went back to `v1.0.0` in 12 min 29 s |
