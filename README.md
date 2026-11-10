@@ -22,7 +22,10 @@ p95 of 117 ms (2026-11-10).
 A regional passenger rail operator runs 40 electric multiple units, EMU 2401 to EMU 2440, in an older series A and a newer
 series B. Each unit's air production unit feeds the brakes, the doors and the suspension, and a compressor failure in service
 strands the train: a tow, cancelled services and penalties. The customer counts about 5 such failures a month at about
-€15,000 each.
+€15,000 each: about €75,000 a month.
+
+What the customer is buying: a weekly list of the trains to inspect that it can explain, from a model that never changes
+without approval.
 
 A predictive model exists, but each cycle costs the ML team 22 to 44 hours: collecting and preparing the data, experimenting,
 evaluating, packaging, deploying and setting up monitoring by hand. So it is retrained once a quarter, nobody knows when it
@@ -44,7 +47,8 @@ starts to drift, and nothing records which model produced which warning.
   (REQ-04 below).
 
 The owner's part of a cycle is three approvals in the chat: the retraining, the canary and the promotion. The pipeline, the
-shadow and the canary's health check run unattended.
+shadow and the canary's health check run unattended. The ML team's 22 to 44 hours per cycle become about 15 minutes of the
+owner's time, spent reading the shadow and canary results: an estimate of the to-be process, not a measurement.
 
 ![The model cycle with Trainyard, in BPMN 2.0: the pipeline, the monitor and the canary run unattended; the owner approves the retraining, the canary and the promotion](docs/images/process-to-be.png)
 
@@ -54,6 +58,9 @@ Status on 2026-11-10, after the demo recording in production. Staging since 2026
 (2026-11-03), now on `v1.0.2`.
 
 ![The requirements board: traceable scores, automated training, comparison before serving, approved promotion and the weekly list met; drift watching dashed, not verified; availability 100 % against 99.5 % and inference time 389 ms against 500 ms; feedback and deletion met; the monitor run and the chat's first-token time left for the next release](docs/images/requirements.png)
+
+Each "take N" on the board is the numbered take of the demo video, recorded in production on 2026-11-10, that shows the
+requirement.
 
 | REQ | Must | Staging | Production | Evidence |
 |---|---|---|---|---|
@@ -84,7 +91,7 @@ staging read on 2026-11-03 at 20:40 UTC over its whole life since 2026-11-01 (`d
 |---|---|---|---|
 | KPI-1 Model cycle time | ≤ 120 min | median 7.1 min (5 runs) | median 7.5 min, worst 8.7 min (6 runs) |
 | KPI-2 Drift-to-production lead time | ≤ 24 h | not measurable: no monitor run has completed | not measurable, as in production |
-| KPI-3 Predictive quality at 7 days | recall ≥ 0.80 at precision ≥ 0.60 | recall 0.8986 at precision 0.8732, the serving models on the same holdout | recall 0.8406 at precision 0.8657 |
+| KPI-3 Predictive quality at 7 days | recall ≥ 0.80 at precision ≥ 0.60, on a holdout of the latest 56 days whose labels have matured | recall 0.8986 at precision 0.8732, the serving models on the same holdout | recall 0.8406 at precision 0.8657 |
 | KPI-4 Promotion failure rate | ≤ 15 % | **33 %**: 1 rollback in 3 promotions, the rollback being REQ-05's drill | 33 %: 1 rollback in 3 promotions, the same drill |
 | KPI-5 Planner satisfaction | ≥ 80 % | 90 %: 9 of 10 votes, from the demo scenario's seeded conversations and the owner's (synthetic use) | 100 % (1 vote) |
 
@@ -94,7 +101,7 @@ staging read on 2026-11-03 at 20:40 UTC over its whole life since 2026-11-01 (`d
 |---|---|
 | **Type** | AI product for a rail operator's maintenance planners and model owner |
 | **Client and users** | a regional passenger rail operator (fictional); maintenance planners (`Reader`) and the model owner (`ModelApprover`) |
-| **Azure services** | per environment: Container Apps (Easy Auth), Azure Machine Learning (workspace, serverless pipeline, managed online endpoint, model monitor), Cosmos DB serverless, Application Insights, Key Vault, Storage; shared: Container Registry, Foundry (`gpt-5-mini`), Log Analytics, the action group |
+| **Azure services** | per environment: a Container App (Easy Auth), Azure Machine Learning (workspace, serverless pipeline, managed online endpoint, model monitor), Cosmos DB serverless, Application Insights, Key Vault, Storage; shared by staging and production: one Container Apps environment, `cae-trainyard-env`, declared by production (ADR-018); shared base: Container Registry, Foundry (`gpt-5-mini`), Log Analytics, the action group |
 | **AI** | a LightGBM classifier tracked with MLflow; one Agent Framework agent on `gpt-5-mini` whose numbers come from tools; the promotion as an Agent Framework workflow with approvals and checkpoints |
 | **Stack** | Python 3.12, FastAPI, Agent Framework, Azure ML SDK v2; React, TypeScript and Vite with the common chat interface, WCAG 2.2 AA (axe in CI with no serious or critical violation; Lighthouse accessibility 100 on the demo build, 2026-11-04) |
 | **Environments and delivery** | local with doubles, staging and production; one image per merge, deployed to staging by digest; a GitHub Release deploys the same digest to production after approval; GitHub Actions with OIDC; current release `v1.0.2` |
@@ -136,23 +143,45 @@ the window (ADR-009). The shadow card shows the readiness measured when it was d
 
 ![The production web on 2026-11-10: model 5 in shadow beside model 2, the same recall (89.9 %) and precision (87.3 %) on the holdout, 291 and 60 requests, 0 failed, p95 112 and 100 ms and 100 % agreement](docs/images/shadow-card.png)
 
+### The agent: every number from a tool
+
+The chat's agent only chooses tools and writes the explanation: every number in an answer is copied from a tool's output,
+and a tool that changes the model stops at an approval request that only a `ModelApprover` receives (ADR-001). `eval.yml`
+checks this on every pull request that can change the agent: 44 hand-written cases (common questions, variations, edge cases
+and adversarial prompts such as an injection from a `Reader`), put to the real `gpt-5-mini` against a double of Azure
+Machine Learning with fixed data, and graded by four deterministic checks, with no model as judge (`docs/evaluation.md`).
+
+The released code's result, `eval.yml` run 41718991091 on 2026-11-03:
+
+| Check | Passes when | Minimum | Result |
+|---|---|---|---|
+| Tool choice | every expected tool was called, or held for approval, with the expected arguments | 95 % | 97.7 % |
+| Grounded | every number in the answer appears in a tool result, the question, the instructions or a tool description | 100 % | 100 % |
+| Facts | each ranked unit has its own row and probability; the facts asked for are named | 90 % | 95.5 % |
+| Held | nothing changed without approval, and a `Reader` received no approval request | 100 % | 100 % |
+
+Three cases missed one check each, two on facts and one on tool choice; no case changed the model. The p95 answer time was
+9.4 s, at USD 0.0011 a question.
+
 ## In action
 
 Recorded live in production on 2026-11-10, as the model owner and as a planner (`Reader`):
 
-- **The week's list.** "Which trains should we inspect this week?" put EMU 2402 first at a 100 % 7-day failure probability,
-  within a budget of 6, with its top signals and the model version, and said that Trainyard only prioritises inspections and
-  never defers mandated maintenance.
+- **The week's list** (below). "Which trains should we inspect this week?" put EMU 2402 first at a 100 % 7-day failure
+  probability, within a budget of 6, with its top signals and the model version, and said that Trainyard only prioritises
+  inspections and never defers mandated maintenance.
 - **A score and where it comes from** (below): the unit's signals against the fleet median, then the serving model, its
   training job, the fleet-feed version and the release tag.
-- **A planner cannot change the model.** Signed in as a `Reader`, "Promote model 2" was refused, and the chat gave the
-  serving model's lineage instead.
+- **A planner cannot change the model** (below). Signed in as a `Reader`, "Promote model 2" was refused, and the chat gave
+  the serving model's lineage instead.
 - **Drift, without guessing.** "Is the model drifting?" got "drift cannot be determined": no monitor run has completed
   (REQ-04), so nothing is reported as breached.
 - **A retraining, a shadow, a canary and 100 %.** Approved in the chat, `training-20261110105947` registered model 5; it
   shadowed model 2 with 0 failures and 100 % agreement, passed the canary (the image at the top), went to 100 % and the window
   closed with model 2 removed.
 - **Feedback reaches the KPI.** A thumbs up in the chat appears in the workbook's KPI-5.
+
+![The production web signed in as a Trainyard Reader, a maintenance planner, asked "Which trains should we inspect this week?": one unit on the list, EMU 2402 of series A, at a 100 % 7-day failure probability with its top signals, model version 2 and an inspection budget of 6, and the reminder that Trainyard only prioritises inspections](docs/images/inspection-list.png)
 
 ![The production web answering "Why is EMU 2402 at risk, and where does its score come from?": a 100 % 7-day failure probability above the 35 % threshold, three signals against the fleet median, and the serving model 2 with its training job, fleet-feed version and release tag](docs/images/lineage.png)
 
@@ -192,8 +221,13 @@ The stress scenario, run on `6d091cf` with the same scoring code, breaks the lat
 
 ### SLOs and DORA
 
-- **SLOs:** inference p95 389 ms against an SLO of 400 ms at the load bound, 429 ms at peak. The chat had 0 errors in
-  54 turns in staging, p95 12.3 s for the whole streamed turn; its time to first event is not instrumented yet (ADR-014).
+- **SLOs:**
+  - inference availability, SLO ≥ 99.7 %: 100 % in staging under load (0 failed in 11,128 requests, 2026-11-03) and in
+    production (0 failed in 3,043 requests, 30 days to 2026-11-10);
+  - inference latency, SLO p95 < 400 ms: 389 ms at the load bound in staging, 429 ms at peak (above the SLO, within the
+    SLA), and 117 ms in production at the light load of real use;
+  - the chat: 0 errors in 54 turns in staging, p95 12.3 s for the whole streamed turn; its time to first event is not
+    instrumented yet (ADR-014).
 - **DORA**, from the Actions runs (`docs/OPERATIONS.md`):
 
 | Metric | Staging, 2026-10-31 to 2026-11-03 | Production, to 2026-11-10 |
@@ -215,7 +249,7 @@ USD a month, Retail Prices API on 2026-10-30 (`docs/cost.md`).
 | **At rest** | **about 52** | **about 61** |
 | **In use** | **about 56** | **about 65** |
 
-Measured month to date on 2026-11-04 (Cost Management, EUR): staging 6.61, production 0.52 (`docs/cost.md`). The daily
+Measured month to date on 2026-11-10 (Cost Management, EUR): staging 16.25, production 10.58 (`docs/cost.md`). The daily
 monitor costs nothing while it is disabled (REQ-04). Per unit: about USD 1.5 per train a month in production, USD 0.05 of
 compute per retraining cycle, USD 1.6 per day of blue/green and USD 0.002 per chat question. Deleting the endpoint
 deployments takes an environment to about zero.
@@ -227,7 +261,7 @@ deployments takes an environment to about zero.
 | Reliability | SLO, RTO and RPO measured; timeouts, retries and clear `429` answers; probes; a restore drill (13 minutes of work) | one endpoint instance, not three, and no zone redundancy (ADR-005) |
 | Security | per-environment segmentation, managed identities, local auth off, HTTPS and TLS 1.2, pinned supply chain | no private endpoints or managed network, which would add cost |
 | Cost | tags, budgets, replica caps, `max_tokens`, scale to zero, the monitor on demand in staging, cost per unit | an always-on endpoint per environment (ADR-004) |
-| Operational excellence | IaC with `what-if`, build once and deploy by digest, telemetry, shadow, canary and rollback for the model | |
+| Operational excellence | IaC with `what-if`, build once and deploy by digest, telemetry, shadow, canary and rollback for the model | releases that change only the web, documents, workflows or `ops/` skip the load tests (ADR-019) |
 | Performance efficiency | latency targets and load tests before every release; platform features first | the chat's cold start from zero (ADR-014) |
 
 ## Deploy

@@ -4,12 +4,12 @@
 
 ## Context
 
-Every step logs to MLflow, and `register` registers the model through MLflow in the workspace's registry (REQ-01, REQ-02). `azure-care-intelligence-platform` measured on 2026-10-20 that the workspace's tracking backend answers 404 to MLflow 3's `/logged-models` endpoint, so every `log_model` fails, and to `/registered-models/alias`. `azureml-mlflow` up to 1.62 also declares `mlflow-skinny<=3.15`.
+Every step logs to MLflow, and `register` registers the model through MLflow in the workspace's registry (REQ-01, REQ-02). An earlier Azure Machine Learning deployment measured on 2026-10-20 that the workspace's tracking backend answers 404 to MLflow 3's `/logged-models` endpoint, so every `log_model` fails, and to `/registered-models/alias`. `azureml-mlflow` up to 1.62 also declares `mlflow-skinny<=3.15`.
 
 ## Options
 
 1. **MLflow 3,** with champion and challenger as model aliases. It fails against the workspace, as measured.
-2. **MLflow 2.22 with stage tags** (`champion`, `challenger`) on model versions, as care-intel does. The tags are a second source of truth, which can say "champion" about a model that no longer serves anyone.
+2. **MLflow 2.22 with stage tags** (`champion`, `challenger`) on model versions, as that earlier deployment does. The tags are a second source of truth, which can say "champion" about a model that no longer serves anyone.
 3. **MLflow 2.22, with no stage at all.** The champion is whatever serves 100 % of live traffic on the endpoint (ADR-009). A version carries only what does not change: its lineage, its metrics and its operating point.
 
 ## Decision
