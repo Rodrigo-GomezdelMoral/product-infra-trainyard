@@ -54,7 +54,7 @@ The customer's process for one model cycle, with the time of each task as the cu
 
 Steps 1 to 8 add up to 20–44 hours; the customer quotes **22–44 hours for a first complete cycle**, not counting waits for infrastructure. Each review and each retraining repeats part of that effort, which is why the model is retrained once a quarter and drift between reviews goes unnoticed.
 
-![The customer's model cycle as-is, in BPMN 2.0](images/process-as-is.svg)
+![The customer's model cycle as-is, in BPMN 2.0](images/process-as-is.png)
 
 ### To-be
 
@@ -74,7 +74,7 @@ With Trainyard, the machine work runs unattended and the people only decide.
 
 Human time per model cycle falls from 22–44 hours to **about 15 minutes** (the to-be estimate, not a measurement), spent reading the shadow and canary results before the two approvals. Retraining is also requested by every merge that changes the model's code or data (staging) and by every release (production). The model never changes by itself: registration is earned at the gate and every traffic change is approved.
 
-![The model cycle to-be with Trainyard, in BPMN 2.0](images/process-to-be.svg)
+![The model cycle to-be with Trainyard, in BPMN 2.0](images/process-to-be.png)
 
 ### Inspection budget and operating point
 

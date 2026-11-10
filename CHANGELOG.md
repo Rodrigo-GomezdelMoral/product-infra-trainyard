@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [1.0.2] - 2026-11-05
+## [1.0.2] - 2026-11-10
 
 Documentation only: since `v1.0.1`, only `docs/` and `CHANGELOG.md` changed, so `release.yml` needs the staging deploy of
 the tag's commit but no load test (ADR-019). The API, the model code and the infrastructure are unchanged.
