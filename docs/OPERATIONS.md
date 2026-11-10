@@ -14,7 +14,7 @@ How Trainyard is run, changed, recovered and paid for. State on 2026-11-10: stag
 | Monitor | on demand | daily at 03:15 UTC; disabled since 2026-11-04, because no run starts (REQ-04, ADR-010) |
 | Budget | 60 in the billing currency (EUR), alerts at 80 % actual and 100 % forecast | 80 EUR, the same |
 
-Each environment has its own identities, workspace, storage, Key Vault, Application Insights, Cosmos DB and Container App. Both apps share one Container Apps environment, `cae-trainyard-env`: the subscription allows 5 environments in all and 1 per region, so production declares it and staging joins it (ADR-018). Everything is in Sweden Central except that environment and the apps, in Germany West Central. Sweden Central allows one Container Apps environment per region, and another product uses it; West Europe refuses new resources from this subscription (ADR-017). Each call from the app to Cosmos DB, the endpoint or the workspace adds a 27 ms round trip. The shared base (registry, Foundry, Log Analytics, action group) belongs to the landing zone.
+Each environment has its own identities, workspace, storage, Key Vault, Application Insights, Cosmos DB and Container App. Both apps share one Container Apps environment, `cae-trainyard-env`: the subscription allows 5 environments in all and 1 per region, so production declares it and staging joins it (ADR-018). Everything is in Sweden Central except that environment and the apps, in Germany West Central. Sweden Central allows one Container Apps environment per region, and another product uses it; West Europe refuses new resources from this subscription (ADR-017). Each call from the app to Cosmos DB, the endpoint or the workspace adds a 27 ms round trip. The registry, Foundry, Log Analytics and the action group belong to the shared base.
 
 ## Delivery
 
@@ -123,7 +123,7 @@ Azure Advisor, 2026-11-01: one recommendation on Trainyard resources, zone redun
 
 Read again on 2026-11-04: the same two staging rows, nothing for production.
 
-Estimate: about USD 52 a month at rest in staging and USD 61 in production, mostly the endpoint. Measured month to date on 2026-11-04 (Cost Management, EUR): staging 6.61, production 0.52; the meters, including two the estimate missed (IP Addresses and the drill's point-in-time restore), are in `cost.md`.
+Estimate: about USD 52 a month at rest in staging and USD 61 in production, mostly the endpoint. Measured month to date on 2026-11-10 (Cost Management, EUR): staging 16.25, production 10.58; the meters of 2026-11-04, including two the estimate missed (IP Addresses and the drill's point-in-time restore), are in `cost.md`.
 
 **Telemetry settings.** Both Application Insights components keep the defaults: a daily cap of 100 GB, no ingestion sampling, IP masking on; the shared workspace keeps `AppRequests` 90 days. The build prompt asked for a daily cap, sampling and 30-day retention. Volumes are tiny, so nothing is billed today; the cap and sampling go into `infra/modules/ml.bicep` in the next runtime release (an `infra/` change needs the load tests, ADR-019), and retention belongs to the shared workspace. The endpoint deployments set `app_insights_enabled` with an instrumentation key, but local auth is off on Application Insights, so no endpoint telemetry arrives there; the SLIs read the endpoint's logs in Log Analytics. No cloud role name is set, so every item carries `unknown_service:python3.12`.
 

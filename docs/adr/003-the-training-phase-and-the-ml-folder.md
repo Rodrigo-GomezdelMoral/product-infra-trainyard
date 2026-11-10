@@ -38,7 +38,7 @@ Ten files, which is the folder's whole budget:
 - **The spec is the interface.** Each step's command-line options are read from its component spec: names, types, and defaults, which live only in the YAML. `local` substitutes local paths into the specs' own `command` lines and runs them. A spec that does not match its step therefore fails on a laptop before it fails in the workspace.
 - **The code snapshot is `ml/` alone.** The components declare `code: ../..`, so that `python -m ml.steps` imports `ml.features` as the app does. `.amlignore` is an allowlist (`/*`, then `!/ml/`). The SDK's own upload walker lists the ten files of `ml/` and nothing else: no `.venv`, `.local`, `app/` or caches.
 - **One environment, built the same way everywhere.** `ml/environment` is a Docker build context: the Azure Machine Learning base image `openmpi4.1.0-ubuntu22.04`, pinned to a dated tag, plus `conda.yaml`. The four components and the deployment declare the same context, so the workspace builds one image, and `make score-local` builds the same one on a laptop.
-  - The base image is the one Learn's data-collection article uses, and the one `azure-care-intelligence-platform` ran on serverless jobs and online endpoints.
+  - The base image is the one Learn's data-collection article uses, already run on serverless jobs and online endpoints in an earlier Azure Machine Learning deployment.
   - **Not a curated environment**, which the Azure Machine Learning service guide prefers where possible. A curated environment fixes package versions we do not choose. Feature parity needs `numpy` and `pandas` equal to the app's, and the model needs LightGBM, MLflow 2.22 (ADR-011), the inference server and the collector together. So the environment starts from the platform's maintained base image and pins its own packages.
   - `test_environment_pins_match_the_laptop` keeps the pins that both sides share equal, so `ml/features.py` gives the same rows in `prep` and in the app.
 - **The app can submit without ML packages.** `ml/pipeline.py` imports only `azure-ai-ml`, so `start_retraining` (phase 8) does not pull LightGBM or MLflow into the application image.
@@ -94,7 +94,7 @@ The review confirmed the rest by running it: the split's windows and gaps, the c
 |---|---|
 | Registering the components and the environment with the image's version from `deploy.yml` | 7 |
 | The first live run on serverless compute | 8 |
-| The workspace building the environment from the build context (NOT VERIFIED; the fallback is the image plus conda file that care-intel measured) | 8 |
+| The workspace building the environment from the build context (NOT VERIFIED; the fallback is the image plus conda file, measured in an earlier deployment) | 8 |
 
 ## Consequences
 

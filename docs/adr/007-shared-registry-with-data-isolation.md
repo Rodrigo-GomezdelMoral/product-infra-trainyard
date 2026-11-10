@@ -4,7 +4,7 @@
 
 ## Context
 
-The landing zone already runs a Basic container registry, `craiplatformshared`, with the admin user disabled. Trainyard needs it for the app image, and for the environment image that each workspace builds for training and scoring. Two workspaces writing environment images into one registry could overwrite each other's repositories.
+The shared base already runs a Basic container registry, `craiplatformshared`, with the admin user disabled. Trainyard needs it for the app image, and for the environment image that each workspace builds for training and scoring. Two workspaces writing environment images into one registry could overwrite each other's repositories.
 
 ## Options
 

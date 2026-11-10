@@ -4,13 +4,13 @@
 
 ## Context
 
-`azure-care-intelligence-platform` has no agent: its users press buttons on fixed views. Trainyard has two users who ask open questions about the same facts. A planner asks which trains to inspect this week and why one of them is on the list. A model owner asks where a score comes from, whether the model drifts, and wants to retrain, promote and roll back without leaving the conversation (REQ-01, REQ-05, REQ-06).
+A product built on fixed views needs no agent: its users press buttons. Trainyard's two users ask open questions instead. A planner asks which trains to inspect this week and why one of them is on the list. A model owner asks where a score comes from, whether the model drifts, and wants to retrain, promote and roll back without leaving the conversation (REQ-01, REQ-05, REQ-06).
 
 A language model in this loop brings two risks. It can invent or recompute a number that a planner then acts on. And a prompt, its own or injected, can try to change the model that serves the fleet.
 
 ## Options
 
-1. **No agent.** A fixed inspection table and lifecycle buttons, as in care-intel. Safe, but every new question becomes a new screen, and approvals live apart from the explanation that justifies them.
+1. **No agent.** A fixed inspection table and lifecycle buttons. Safe, but every new question becomes a new screen, and approvals live apart from the explanation that justifies them.
 2. **An agent that reads the data in its prompt** and answers from it. It is flexible, but the numbers in an answer are the model's arithmetic, and nothing stops it from acting on anything it can see.
 3. **One agent that only chooses tools and writes the explanation.** Every number comes from a tool. The server decides which tools a user's agent has, and every tool that changes the model waits for a person.
 

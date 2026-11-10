@@ -36,7 +36,7 @@ The answer has three fields:
 - **Only the contributions are rounded,** to four decimals. The probability and the threshold are returned exactly. If they were rounded too, a unit within 1e-4 below the threshold could be flagged by the app although the gate never counted it.
 - **The model version** is the last folder of `AZUREML_MODEL_DIR`. Learn's scoring example documents that path as `./azureml-models/$MODEL_NAME/$VERSION` (2026-03-26).
 - **One scorer for the gate and for serving.** `Scorer` is the code that serves, and `evaluate` imports it, so the gate measures exactly what users will get.
-- **The module imports nothing from the repository.** A deployment's code snapshot is the `ml/` folder, mounted under the application root, where `ml` is not importable as a package (measured in care-intel).
+- **The module imports nothing from the repository.** A deployment's code snapshot is the `ml/` folder, mounted under the application root, where `ml` is not importable as a package (measured in an earlier Azure Machine Learning deployment).
 
 ### Collection
 
