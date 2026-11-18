@@ -14,7 +14,7 @@ How Trainyard is run, changed, recovered and paid for. State on 2026-11-10: stag
 | Monitor | on demand | daily at 03:15 UTC; disabled since 2026-11-04, because no run starts (REQ-04, ADR-010) |
 | Budget | 60 in the billing currency (EUR), alerts at 80 % actual and 100 % forecast | 80 EUR, the same |
 
-Each environment has its own identities, workspace, storage, Key Vault, Application Insights, Cosmos DB and Container App. Both apps share one Container Apps environment, `cae-trainyard-env`: the subscription allows 5 environments in all and 1 per region, so production declares it and staging joins it (ADR-018). Everything is in Sweden Central except that environment and the apps, in Germany West Central. Sweden Central allows one Container Apps environment per region, and another product uses it; West Europe refuses new resources from this subscription (ADR-017). Each call from the app to Cosmos DB, the endpoint or the workspace adds a 27 ms round trip. The registry, Foundry, Log Analytics and the action group belong to the shared base.
+Each environment has its own identities, workspace, storage, Key Vault, Application Insights, Cosmos DB and Container App. Both apps share one Container Apps environment, `cae-trainyard-env`: the subscription allows 5 environments in all and 1 per region, so production declares it and staging joins it (ADR-018). Everything is in Sweden Central except that environment and the apps, in Germany West Central. Sweden Central allows one Container Apps environment per region, and another workload uses it; West Europe refuses new resources from this subscription (ADR-017). Each call from the app to Cosmos DB, the endpoint or the workspace adds a 27 ms round trip. The registry, Foundry, Log Analytics and the action group belong to the shared base.
 
 ## Delivery
 
@@ -79,7 +79,7 @@ A failed canary rolls itself back; investigate it afterwards from the shadow and
 3. **Diagnose:** console and event logs of the endpoint, App Insights for the app, `AmlRunStatusChangedEvent` for the pipeline and the monitor.
 4. **Recover and record:** fix through a `fix/` branch, and note the incident and its timeline in the pull request.
 
-The owner does every step: there is no on-call rotation for a portfolio product.
+The owner does every step: there is no on-call rotation in a single-author project.
 
 ### A failed endpoint
 
@@ -87,7 +87,7 @@ Azure ML accepts no update to an endpoint whose creation failed ("Please recreat
 
 ### The stuck monitor run, 2026-11-04
 
-Production's first monitor run started at 03:15 UTC and never started its Spark steps: the service submitted the four `model_data_collector_preprocessor` steps on runtime 3.4 while the schedule reads 3.5, and they stayed Queued with no charged core-seconds, the defect ADR-010 records in staging. No alert fired (the blind spot above). After 11 hours the owner cancelled the run and disabled the schedule (`22-monitor-stop.sh`). REQ-04's monitor is NOT VERIFIED, a documented limitation. The promotion's `watch()` re-creates the schedule enabled whenever a model goes to 100 % or traffic goes back after a rollback, so `22-monitor-stop.sh` runs again after every production promotion or rollback.
+Production's first monitor run started at 03:15 UTC and never started its Spark steps: the service submitted the four `model_data_collector_preprocessor` steps on runtime 3.4 while the schedule reads 3.5, and they stayed Queued with no charged core-seconds, the defect ADR-010 records in staging. No alert fired (the blind spot above). After 11 hours the owner cancelled the run and disabled the schedule (`22-monitor-stop.sh`). REQ-04's monitor is not measured yet, a documented limitation. The promotion's `watch()` re-creates the schedule enabled whenever a model goes to 100 % or traffic goes back after a rollback, so `22-monitor-stop.sh` runs again after every production promotion or rollback.
 
 ## Backup and restore
 
@@ -125,7 +125,7 @@ Read again on 2026-11-04: the same two staging rows, nothing for production.
 
 Estimate: about USD 52 a month at rest in staging and USD 61 in production, mostly the endpoint. Measured month to date on 2026-11-10 (Cost Management, EUR): staging 16.25, production 10.58; the meters of 2026-11-04, including two the estimate missed (IP Addresses and the drill's point-in-time restore), are in `cost.md`.
 
-**Telemetry settings.** Both Application Insights components keep the defaults: a daily cap of 100 GB, no ingestion sampling, IP masking on; the shared workspace keeps `AppRequests` 90 days. The build prompt asked for a daily cap, sampling and 30-day retention. Volumes are tiny, so nothing is billed today; the cap and sampling go into `infra/modules/ml.bicep` in the next runtime release (an `infra/` change needs the load tests, ADR-019), and retention belongs to the shared workspace. The endpoint deployments set `app_insights_enabled` with an instrumentation key, but local auth is off on Application Insights, so no endpoint telemetry arrives there; the SLIs read the endpoint's logs in Log Analytics. No cloud role name is set, so every item carries `unknown_service:python3.12`.
+**Telemetry settings.** Both Application Insights components keep the defaults: a daily cap of 100 GB, no ingestion sampling, IP masking on; the shared workspace keeps `AppRequests` 90 days. The specification asked for a daily cap, sampling and 30-day retention. Volumes are tiny, so nothing is billed today; the cap and sampling go into `infra/modules/ml.bicep` in the next runtime release (an `infra/` change needs the load tests, ADR-019), and retention belongs to the shared workspace. The endpoint deployments set `app_insights_enabled` with an instrumentation key, but local auth is off on Application Insights, so no endpoint telemetry arrives there; the SLIs read the endpoint's logs in Log Analytics. No cloud role name is set, so every item carries `unknown_service:python3.12`.
 
 ## Load tests
 
@@ -211,7 +211,7 @@ Recorded with `ops/record.py` as the published demo (`web/src/demo/runs`); times
 | Fleet feed with firmware-b (`release.yml` dispatch, owner's approval) | success in 5 min, 15:50; `fleet-feed` `20261104154812` |
 | Run 1, the week's inspection list (owner) | EMU 2402 first at 99 %, budget 6; model 1 |
 | Run 2, a unit and its lineage | EMU 2417 at 0 % (threshold 15 %), not flagged; `training-20261103222555`, `fleet-feed` `20261103222125`, tag `v1.0.0` (REQ-01) |
-| Run 3, drift | signals watched; "no monitor run has completed", nothing reported as breached (REQ-04 NOT VERIFIED) |
+| Run 3, drift | signals watched; "no monitor run has completed", nothing reported as breached (REQ-04 not measured yet) |
 | Run 4, retraining approved in the chat | `training-20261104162614` at 16:26; model 2 registered and gated at 16:36 (REQ-02) |
 | Model rollback drill (REQ-05) | model 2 in shadow from 16:49 (20 % mirrored), canary at 10 % at 17:36; Roll back at 17:38: model 1 back at 100 % in 3 s, the challenger removed in 269 s |
 | Run 5, shadow, canary and promotion | model 2's second promotion: shadow card 34 mirrored requests, 0 failed, p95 111 ms; canary at 10 % from 19:38, ready; 100 % and window closed at 19:54, model 1 removed |
@@ -231,7 +231,7 @@ Recorded live for the demo video, as the owner and as a `Reader`, after the rele
 | The week's inspection list | EMU 2402 (series A) first at 100 %, budget 6; model 2 (REQ-06) |
 | A unit and its lineage | EMU 2402 flagged (threshold 35 %); model 2, `training-20261104162614`, `fleet-feed` `20261104154812`, tag `v1.0.0` (REQ-01) |
 | A `Reader` asking to promote | refused; the chat gave the serving model's lineage instead (REQ-05) |
-| Drift | "drift cannot be determined": no monitor run has completed (REQ-04 NOT VERIFIED) |
+| Drift | "drift cannot be determined": no monitor run has completed (REQ-04 not measured yet) |
 | Retraining approved in the chat | `training-20261110105947` on `fleet-feed` `20261104154812`; model 5 registered (REQ-02) |
 | Shadow of model 5 | 291 requests on model 2 and 60 mirrored to model 5, 0 failed, p95 112 and 100 ms, 100 % agreement; recall 89.9 % and precision 87.3 % for both on the same holdout (REQ-03) |
 | Canary at 10 % | 15 health checks in 15.4 minutes: 11 requests, 0 failed, p95 113 ms; healthy and ready for 100 % |

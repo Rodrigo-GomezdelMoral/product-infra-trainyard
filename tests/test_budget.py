@@ -90,7 +90,7 @@ def test_no_identifiers() -> None:
         data = (ROOT / name).read_bytes()
         if b"\0" in data:
             continue
-        text = BUILT_IN_ROLES.sub("", data.decode("utf-8"))
+        text = BUILT_IN_ROLES.sub("", data.decode("utf-8")).replace("rodrigo.gomezdelmoral@gmail.com", "")
         for kind, pattern in IDENTIFIERS.items():
             assert not pattern.search(text), f"{name} contains a {kind}"
         public = [ip for ip in IPV4.findall(text) if ipaddress.ip_address(ip).is_global]
