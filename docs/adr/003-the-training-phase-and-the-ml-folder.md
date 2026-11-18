@@ -6,7 +6,7 @@
 
 REQ-02 asks for training without manual steps, reproducible from the same inputs and seed. REQ-03 asks for every challenger to be compared with the champion before it serves anyone. REQ-04 needs the production inputs and outputs collected for the monitor. All three need code that runs in Azure Machine Learning, not in the Container App: four pipeline steps, a pipeline definition, a scoring script and the environment they run in.
 
-The common product skeleton has nine phases, with `eval` as phase 3, and a single application budget of 1,150 lines. Neither has a place for code that runs as Azure Machine Learning jobs.
+The project's starting skeleton has nine phases, with `eval` as phase 3, and a single application budget of 1,150 lines. Neither has a place for code that runs as Azure Machine Learning jobs.
 
 ## Options
 
@@ -18,7 +18,7 @@ The common product skeleton has nine phases, with `eval` as phase 3, and a singl
 
 **Option 3.** Phase 3 is `feature/training`, so the skeleton's `eval` becomes phase 4.
 
-**Budgets, set by the owner in phase 5 (2026-10-31).** `eval/` and `load/` count as application Python with `app/` (1,150 lines), as in the other products, and the test limit is 850 lines for `tests/` only: the pipeline, the scoring script and the promotion workflow with its lease, which REQ-02, REQ-03 and REQ-05 need, add test surface that the reference product, with 700, does not have.
+**Budgets, set by the owner in phase 5 (2026-10-31).** `eval/` and `load/` count as application Python with `app/` (1,150 lines), as in the starting skeleton, and the test limit is 850 lines for `tests/` only: the pipeline, the scoring script and the promotion workflow with its lease, which REQ-02, REQ-03 and REQ-05 need, add test surface that the starting skeleton, with 700, does not have.
 
 ### What `ml/` holds
 
@@ -94,7 +94,7 @@ The review confirmed the rest by running it: the split's windows and gaps, the c
 |---|---|
 | Registering the components and the environment with the image's version from `deploy.yml` | 7 |
 | The first live run on serverless compute | 8 |
-| The workspace building the environment from the build context (NOT VERIFIED; the fallback is the image plus conda file, measured in an earlier deployment) | 8 |
+| The workspace building the environment from the build context (not checked yet; the fallback is the image plus conda file, measured in an earlier deployment) | 8 |
 
 ## Consequences
 

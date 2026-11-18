@@ -35,5 +35,5 @@ A light STRIDE pass over Trainyard as deployed by `infra/main.bicep`. Each mitig
 - **Two regions.** The app runs in Germany West Central and its data stays in Sweden Central (ADR-017): conversations and scores cross between them over TLS 1.2 on the Microsoft backbone, with the same Entra ID checks at every hop, and nothing is kept at rest in Germany West Central.
 - **One Container Apps environment for staging and production** (ADR-018). They share its log destination, default domain, internal network and platform upgrades; apps, identities, data, sign-in and scaling stay separate, and only a reviewed release changes the environment.
 - **No private networking.** Public endpoints with Entra ID and TLS 1.2, no private endpoints or managed virtual network. They would add cost, and model monitoring does not support approved-outbound-only isolation (Guidance map, Security).
-- **Shared base.** The registry, Foundry, Log Analytics and the action group are shared with other products; Trainyard only adds role assignments there (ADR-007).
+- **Shared base.** The registry, Foundry, Log Analytics and the action group are shared with other workloads; Trainyard only adds role assignments there (ADR-007).
 - **One instance.** Availability rests on the platform replacing an unhealthy instance (ADR-005).

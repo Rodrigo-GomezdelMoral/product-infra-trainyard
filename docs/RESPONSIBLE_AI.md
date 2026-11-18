@@ -1,8 +1,8 @@
 # Responsible AI impact assessment
 
-Trainyard, following the structure of Microsoft's Responsible AI Impact Assessment template, with a model card for the failure-risk model at the end. **All data in this repository is synthetic** (`data/README.md`).
+Trainyard's impact assessment follows the sections of the Responsible AI Impact Assessment Template and the goals of the [Microsoft Responsible AI Standard](https://www.microsoft.com/ai/principles-and-approach), together with the responsible AI guidance of the [Azure Well-Architected Framework](https://learn.microsoft.com/azure/well-architected/) for [AI workloads](https://learn.microsoft.com/azure/well-architected/ai/responsible-ai). A model card for the failure-risk model is at the end. **All data in this repository is synthetic** (`data/README.md`).
 
-State on 2026-11-04: deployed to staging since 2026-11-01 and to production since `v1.0.0` (2026-11-03, 22:26 UTC), each environment serving one gated model. The evaluation is in `docs/evaluation.md`. The drift monitor has never completed a run in either environment: REQ-04's monitor is NOT VERIFIED (ADR-010).
+State on 2026-11-04: deployed to staging since 2026-11-01 and to production since `v1.0.0` (2026-11-03, 22:26 UTC), each environment serving one gated model. The evaluation is in `docs/evaluation.md`. The drift monitor has never completed a run in either environment: REQ-04's monitor is not measured yet (ADR-010).
 
 ## 1. System information
 
@@ -21,6 +21,19 @@ State on 2026-11-04: deployed to staging since 2026-11-01 and to production sinc
 2. A model owner retrains the model, compares the challenger with the champion, and approves or rolls back each promotion step.
 
 ## 2. Intended uses
+
+**Goals of the Responsible AI Standard that apply:**
+- *Impact assessment (A1):* this document, which the model owner reviews with each phase's pull request and again before `v1.0.0` (section 5).
+- *Oversight of significant adverse impacts (A2):* section 3 finds that no sensitive-use trigger applies and gives, for each failure, its impact and how it is detected. The detection of a drifted model by the daily monitor is not measured yet: no monitor run has completed in either environment (ADR-010).
+- *Fit for purpose (A3):* each intended use below states its fitness for purpose. A model serves only after a gate of recall of at least 0.80 at precision of at least 0.60 on the most recent matured weeks, and section 3 lists the uses that are out of scope or unsupported.
+- *Data governance and management (A4):* section 4: a synthetic fleet feed; no personal data in the telemetry or the prompts; conversations under a hash of the user's object id, which expire after 30 days and can be deleted at any time (REQ-10); production data collected by the endpoint that never crosses environments (ADR-002, ADR-008).
+- *Human oversight and control (A5):* the model never changes by itself. Every change tool waits for the model owner's approval, a `Reader` never receives those tools, a failed canary rolls back automatically, and the owner can roll back in one step during the window (ADR-009).
+- *System intelligibility for decision making (T1):* each answer gives the top contributing signals and the model version, and every registered version carries its git commit, data version, pipeline job, gate decision and metrics (the model card's lineage).
+- *Communication to stakeholders (T2):* this document, with its known limitations and its model card, and the README.
+- *Disclosure of AI interaction (T3):* the interface discloses the AI in its own text: the empty state opens with "An AI assistant for this week's train inspections" and the message box reads "Ask the AI assistant about the fleet or the model".
+- *Quality of service (F1):* applied to the two train series, because the system makes no decision about people: the gate requires a recall of at least 0.70 in every series. Series B's recall is judged on few events (section 3).
+- *Failures and remediations (RS2):* section 3 lists each failure with its impact and its detection; the remediations are the canary's automatic rollback, the one-step rollback during the window and the runbook (section 5).
+- *Ongoing monitoring, feedback and evaluation (RS3):* `eval/` on every pull request that can change the agent, KPI-3 on matured labels in every training run, and the KPI-5 feedback. The daily monitor of data drift, prediction drift and data quality is defined but not measured yet: no run has completed in either environment, and the schedule is disabled (ADR-010).
 
 ### Intended use 1: prioritising this week's inspections
 
@@ -100,17 +113,12 @@ This summary follows the four stages of Microsoft's guidance for responsible gen
 | Invented or misattributed numbers | numbers only from tools; per-unit checks | `eval/`, `test_numbers_match_tools` | tested against the real model |
 | Unauthorised model changes | role filtering on the server; `always_require` approval on every change tool | `test_reader_cannot_promote`, `test_retraining_waits_for_approval`, `held` at 100 % | tested against the real model |
 | A bad promotion | shadow on mirrored traffic, a 10 % canary with an automatic health check and rollback, one-step rollback during the window | `test_canary_health_rollback`, `test_shadow_step` | tested with doubles; live in staging on 2026-11-03 (rollback, canary, promotion; ADR-009) |
-| Drift going unnoticed | a daily `MonitorSchedule` with data drift, prediction drift and data quality; an alert; the workbook; meanwhile, KPI-3 on matured labels in every training run and `model_status`, which never reports drift from a run that did not complete | ADR-010; production's first run (2026-11-04, 03:15 UTC) never started its Spark steps and was cancelled, and the schedule is disabled | **NOT VERIFIED**: no monitor run has completed in either environment, a platform limitation documented in ADR-010 |
+| Drift going unnoticed | a daily `MonitorSchedule` with data drift, prediction drift and data quality; an alert; the workbook; meanwhile, KPI-3 on matured labels in every training run and `model_status`, which never reports drift from a run that did not complete | ADR-010; production's first run (2026-11-04, 03:15 UTC) never started its Spark steps and was cancelled, and the schedule is disabled | not measured yet: no monitor run has completed in either environment, a platform limitation documented in ADR-010 |
 | Over-reliance | explanations with the top contributing signals and the model version; mandated inspections untouched; Trainyard prioritises and never decides | evaluation cases on explanations and on the mandated-inspection refusal | tested against the real model |
 | Harmful content in the chat | the shared deployment's guardrail policy `guardrail-chat` | the deployment's configuration, read on 2026-10-31 | configured on the platform |
 | Prompt injection | change tools absent for a `Reader`; approvals for a model owner | four adversarial cases | tested against the real model |
 
-**Goals that apply** (Microsoft Responsible AI Standard):
-- **Accountability:** A1 impact assessment (this document), A2 oversight of significant adverse impacts (monitoring and alerts), A3 fit for purpose (sections 2 and 3), A4 data governance (section 4), A5 human oversight and control (approvals and rollback).
-- **Transparency:** T1 intelligibility for decision making (explanations and lineage), T2 communication to stakeholders (this document and the README), T3 disclosure of AI interaction (the interface presents the chat as an AI assistant, phase 6).
-- **Fairness:** F1 quality of service, applied to the two train series as the gate's per-series recall floor. The system makes no decisions about people, so F2 and F3 do not apply.
-- **Reliability and safety:** RS1 guidance (`OPERATIONS.md`, phase 7), RS2 failures and remediations (rollback, runbook), RS3 ongoing monitoring, feedback and evaluation (monitor, KPI-5 feedback, `eval.yml`).
-- **Privacy and security, and inclusiveness:** Entra ID, managed identities, no keys, data minimisation, and WCAG 2.2 AA for the interface (phase 6).
+**Goals that apply.** Section 2 lists the goals of the Microsoft Responsible AI Standard that this product meets, each with how. Beyond them, privacy and security rest on Entra ID sign-in, managed identities, no keys and data minimisation, and inclusiveness on WCAG 2.2 AA for the interface.
 
 **Review.** The model owner reviews this assessment with each phase's pull request, and again before `v1.0.0`.
 

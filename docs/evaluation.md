@@ -98,7 +98,7 @@ All runs used `gpt-5-mini` version 2025-08-07, GlobalStandard, guardrail `guardr
 
   Every fix only widened what a correct answer may look like. So the 36 cases that passed in run 2 also pass the final checks.
 - **The final code** was evaluated by `eval.yml`: see the next section.
-- **A 429 from the shared deployment** stopped a run started straight after run 2. Its quota is 100K tokens a minute, shared with other products. The OpenAI SDK's 2 default retries were not enough. The runner now allows 8 (`with_options(max_retries=8)`), and they honour `Retry-After`. A run that still fails exits non-zero and reports that it did not complete: it fails closed.
+- **A 429 from the shared deployment** stopped a run started straight after run 2. Its quota is 100K tokens a minute, shared with other workloads. The OpenAI SDK's 2 default retries were not enough. The runner now allows 8 (`with_options(max_retries=8)`), and they honour `Retry-After`. A run that still fails exits non-zero and reports that it did not complete: it fails closed.
 
 ## Result of the released code, 2026-11-03
 

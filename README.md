@@ -2,18 +2,38 @@
 
 Built by **Rodrigo Martín Gómez del Moral Herranz**
 
-<a href="https://github.com/Rodrigo-GomezdelMoral"><img src="docs/images/author/github.png" alt="GitHub" height="36"></a>&nbsp;&nbsp;<a href="https://www.linkedin.com/in/rodrigo-mart%C3%ADn-g%C3%B3mez-del-moral-herranz"><img src="docs/images/author/linkedin.png" alt="LinkedIn" height="36"></a>&nbsp;&nbsp;<a href="https://rodrigogomezdelmoralherranz.es"><img src="docs/images/author/portfolio.png" alt="Portfolio" height="36"></a>
+<a href="mailto:rodrigo.gomezdelmoral@gmail.com"><img src="docs/images/author/email.png" alt="Email" height="36"></a>&nbsp;&nbsp;<a href="https://www.linkedin.com/in/rodrigo-mart%C3%ADn-g%C3%B3mez-del-moral-herranz"><img src="docs/images/author/linkedin.png" alt="LinkedIn" height="36"></a>&nbsp;&nbsp;<a href="https://github.com/Rodrigo-GomezdelMoral"><img src="docs/images/author/github.png" alt="GitHub" height="36"></a>&nbsp;&nbsp;<a href="https://rodrigogomezdelmoral.es"><img src="docs/images/author/portfolio.png" alt="Professional Portfolio" height="36"></a>
 
-Trainyard tells a rail operator's maintenance planners which trains to inspect this week and why, and lets the model owner
-retrain, compare, promote and roll back the model behind that answer from the same chat, every traffic change approved. A
-model cycle that cost the customer's ML team 22 to 44 hours is estimated at about 15 minutes of human time: in production,
-training ran in a median of 7.1 minutes (5 runs) and the endpoint answered 3,043 requests in 30 days with none failed and a
-p95 of 117 ms (2026-11-10).
+Trainyard is an AI solution on Azure that tells a rail operator's maintenance planners which trains to inspect this week
+and why, and lets the model owner retrain, compare, promote and roll back the model behind that answer from the same chat,
+every traffic change approved. A model cycle that cost the customer's ML team 22 to 44 hours is estimated at about 15
+minutes of human time: in production, training ran in a median of 7.1 minutes (5 runs) and the endpoint answered 3,043
+requests in 30 days with none failed and a p95 of 117 ms (2026-11-10).
 
-**Live demo:** <https://rodrigo-gomezdelmoral.github.io/product-infra-trainyard/> - runs recorded from the production deployment, replayed with their real timings and no backend.
+<p align="center"><a href="https://rodrigogomezdelmoral.es/en/projects/product-infra-trainyard#video"><img src="docs/images/author/demo-video.png" alt="Watch the demo video" height="48"></a></p>
 
-> **All data is synthetic.** The fleet, its telemetry and its failures come from a seeded simulator that follows the signal
-> schema of the public MetroPT-3 dataset; MetroPT-3's data is not used. The problem's figures are the customer's estimates.
+**Built to standard.** This AI solution is designed, built, validated and operated in alignment with the **Microsoft
+Responsible AI Standard** (Fairness, Reliability and Safety, Privacy and Security, Inclusiveness, Transparency,
+Accountability) and the **Azure Well-Architected Framework** (Reliability, Security, Cost Optimization, Operational
+Excellence, Performance Efficiency).
+
+Every engineering decision is driven by a concrete requirement and grounded in one or more of these principles and
+pillars, with supporting evidence documented in this repository. These principles guide the development of
+responsible, reliable and scalable AI solutions through specialised engineering practices in evaluation, safety,
+identity, operations and cost management.
+
+See how [each principle](#microsoft-responsible-ai-standard) and [each pillar](#azure-well-architected-framework) is
+applied.
+
+<p align="center"><a href="https://rodrigo-gomezdelmoral.github.io/product-infra-trainyard/"><img src="docs/images/author/live-demo.png" alt="Live demo" height="48"></a></p>
+
+Six runs recorded from the production deployment on 2026-11-04, replayed in the browser with their real timings, no backend and no sign-in: this week's inspection list, why a train is at risk, whether the model is drifting, a retraining approval, a promotion through shadow, canary and 100 %, and a Reader who asks to promote and is refused.
+
+> **All data is synthetic.** The fleet, its telemetry and its failures come from a seeded simulator,
+> [`app/domain/simulator.py`](app/domain/simulator.py), that follows the signal schema of the public MetroPT-3 dataset;
+> MetroPT-3's data is not used. The problem's figures are the customer's estimates ([`docs/PRODUCT.md`](docs/PRODUCT.md)).
+> Production's figures come from the releases' training runs, the conversations seeded before the recording, the
+> walk-throughs and the demo recording, not from planners' work.
 
 Production, 2026-11-10: model 5 as a canary at 10 % of live traffic after 15 health checks, waiting for the owner to promote it to
 100 % or roll it back.
@@ -34,7 +54,7 @@ A predictive model exists, but each cycle costs the ML team 22 to 44 hours: coll
 evaluating, packaging, deploying and setting up monitoring by hand. So it is retrained once a quarter, nobody knows when it
 starts to drift, and nothing records which model produced which warning.
 
-![The model cycle as it is today, in BPMN 2.0: ten manual tasks from data collection to retraining, 22 to 44 hours of the ML team per cycle](docs/images/process-as-is.png)
+![The model cycle as it is today, in BPMN 2.0: ten manual tasks from data collection to retraining, 22 to 44 hours of the ML team per cycle](docs/images/process-as-is.svg)
 
 ## What it does
 
@@ -49,7 +69,7 @@ starts to drift, and nothing records which model produced which warning.
   workbook. Defined and deployed; no monitor run has completed yet, because the platform never starts its Spark steps
   (REQ-04 below).
 
-![The model cycle with Trainyard, in BPMN 2.0: the pipeline, the monitor and the canary run unattended; the owner approves the retraining, the canary and the promotion](docs/images/process-to-be.png)
+![The model cycle with Trainyard, in BPMN 2.0: the pipeline, the monitor and the canary run unattended; the owner approves the retraining, the canary and the promotion](docs/images/process-to-be.svg)
 
 The owner's part of a cycle is three approvals in the chat: the retraining, the canary and the promotion. The pipeline, the
 shadow and the canary's health check run unattended. The ML team's 22 to 44 hours per cycle become about 15 minutes of the
@@ -61,14 +81,14 @@ Status on 2026-11-10, after the demo recording in production. Staging since 2026
 (2026-11-03), now on `v1.0.2`. Each "take N" on the board is the numbered take of the demo video, recorded in production on
 2026-11-10, that shows the requirement.
 
-![The requirements board: traceable scores, automated training, comparison before serving, approved promotion and the weekly list met; drift watching dashed, not verified; availability 100 % against 99.5 % and inference time 389 ms against 500 ms; feedback and deletion met; the monitor run and the chat's first-token time left for the next release](docs/images/requirements.png)
+![The requirements board: traceable scores, automated training, comparison before serving, approved promotion and the weekly list met; drift watching dashed, not measured yet; availability 100 % against 99.5 % and inference time 389 ms against 500 ms; feedback and deletion met; the monitor run and the chat's first-token time left for the next release](docs/images/requirements.svg)
 
 | REQ | Must | Staging | Production | Evidence |
 |---|---|---|---|---|
 | REQ-01 | Every prediction traceable | done | met | `test_register_tags_lineage`; on 2026-11-10, asked "Why is EMU 2402 at risk, and where does its score come from?", the chat named model 2, `training-20261104162614`, `fleet-feed` version `20261104154812` and the release tag `v1.0.0`, the tags the model carries in Azure Machine Learning studio (ADR-011) |
 | REQ-02 | Automated training | done | met | `test_pipeline_builds`, `test_components_local`; 6 pipeline runs in staging, median 7.5 min; in production 5 runs to 2026-11-10, median 7.1 min, the last one `training-20261110105947`, approved in the chat, which registered model 5 |
 | REQ-03 | Challenger compared before it serves | done | met | `test_gate_refuses_worse`, `test_shadow_step`; on 2026-11-10 model 5 shadowed model 2 in production: 60 mirrored requests against the champion's 291, 0 failed, p95 100 ms against 112 ms, 100 % agreement, the same recall (89.9 %) and precision (87.3 %) on the same holdout |
-| REQ-04 | Drift and quality watched | **NOT VERIFIED** | **NOT VERIFIED** | a documented platform limitation. The schedule, the log alert and the workbook are deployed, but no monitor run has ever started its Spark steps: the service submits them on runtime 3.4 although the schedule asks for 3.5, and a step submitted directly on 3.5 did not start either. Production's first run stayed Queued for 11 hours at no charge; it was cancelled and the schedule disabled. Meanwhile KPI-3 is measured on matured labels in every training run, and the chat never reports drift from a run that did not complete (ADR-010) |
+| REQ-04 | Drift and quality watched | not measured yet: no monitor run has completed | not measured yet: no monitor run has completed | a documented platform limitation. The schedule, the log alert and the workbook are deployed, but no monitor run has ever started its Spark steps: the service submits them on runtime 3.4 although the schedule asks for 3.5, and a step submitted directly on 3.5 did not start either. Production's first run stayed Queued for 11 hours at no charge; it was cancelled and the schedule disabled. Meanwhile KPI-3 is measured on matured labels in every training run, and the chat never reports drift from a run that did not complete (ADR-010) |
 | REQ-05 | Controlled promotion and rollback | done | met | `test_canary_health_rollback`, `test_reader_cannot_promote`; the rollback drill in production (2026-11-04) put model 1 back at 100 % in 3 s and removed the challenger in 269 s; on 2026-11-10 model 5 passed 15 health checks at 10 % in 15.4 minutes (11 requests, 0 failed, p95 113 ms), went to 100 % on the owner's approval, and closing the window removed model 2; a `Reader` asking to promote was refused |
 | REQ-06 | This week's inspection list | done | met | `test_fleet_risk_budget`, `test_numbers_match_tools`; on 2026-11-10 the week's list, within a budget of 6, put EMU 2402 (series A) first at a 100 % 7-day failure probability, with its top signals and the model version |
 | REQ-07 · SLA | Availability ≥ 99.5 % a month, up to 5 requests a second of 40 rows | met under load | met | the SLA table below |
@@ -90,7 +110,7 @@ The SLAs, measured at the endpoint (`AmlOnlineEndpointTrafficLog`) against what 
 Read in production on 2026-11-10 after the demo recording, with the workbook's queries on the Application Insights events;
 staging was read on 2026-11-03 at 20:40 UTC over its whole life since 2026-11-01 ([`docs/OPERATIONS.md`](docs/OPERATIONS.md)).
 
-![The KPI board: cycle time 7.1 min against 120, recall 0.90 against 0.80, precision 0.87 against 0.60 and positive feedback 90 % against 80 % met; promotion failures 33 % against 15 % missed; drift to production not measured](docs/images/kpis.png)
+![The KPI board: cycle time 7.1 min against 120, recall 0.90 against 0.80, precision 0.87 against 0.60 and positive feedback 90 % against 80 % met; promotion failures 33 % against 15 % missed; drift to production not measured](docs/images/kpis.svg)
 
 | KPI | Target | Measured in production | Cases |
 |---|---|---|---|
@@ -108,11 +128,11 @@ recall 0.8406 at precision 0.8657; promotion failure rate 33 %, 1 rollback in 3 
 
 | | |
 |---|---|
-| **Type** | AI product for a rail operator's maintenance planners and model owner |
+| **Type** | AI solution for a rail operator's maintenance planners and model owner |
 | **Client and users** | a regional passenger rail operator (fictional); maintenance planners (`Reader`) and the model owner (`ModelApprover`) |
 | **Azure services** | per environment: a Container App (Easy Auth), Azure Machine Learning (workspace, serverless pipeline, managed online endpoint, model monitor), Cosmos DB serverless, Application Insights, Key Vault, Storage; shared by staging and production: one Container Apps environment, `cae-trainyard-env`, declared by production (ADR-018); shared base: Container Registry, Foundry (`gpt-5-mini`), Log Analytics, the action group |
 | **AI** | a LightGBM classifier tracked with MLflow; one Agent Framework agent on `gpt-5-mini` whose numbers come from tools; the promotion as an Agent Framework workflow with approvals and checkpoints |
-| **Stack** | Python 3.12, FastAPI, Agent Framework, Azure ML SDK v2; React, TypeScript and Vite with the common chat interface, WCAG 2.2 AA (axe in CI with no serious or critical violation; Lighthouse accessibility 100 on the demo build, 2026-11-04) |
+| **Stack** | Python 3.12, FastAPI, Agent Framework, Azure ML SDK v2; React, TypeScript and Vite with the chat interface, WCAG 2.2 AA (axe in CI with no serious or critical violation; Lighthouse accessibility 100 on the demo build, 2026-11-04) |
 | **Environments and delivery** | local with doubles, staging and production; one image per merge, deployed to staging by digest; a GitHub Release deploys the same digest to production after approval; GitHub Actions with OIDC; current release `v1.0.2` |
 | **Security** | Entra ID everywhere, managed identities, no secrets, local auth off, app roles checked on the server, `aad_token` on the endpoint |
 | **SLA** | inference availability ≥ 99.5 % and p95 < 500 ms up to 5 requests a second of 40 rows; measured: 100 % and p95 389 ms at 5.38 a second for 30 minutes in staging (`0246d04`, 2026-11-03); 0 failed in 3,043 requests and p95 117 ms in production over 30 days to 2026-11-10 |
@@ -120,12 +140,13 @@ recall 0.8406 at precision 0.8657; promotion failure rate 33 %, 1 rollback in 3 
 
 ## Architecture
 
-![Per environment, the Trainyard app serves the planner and the owner and reaches, with its managed identity, the Machine Learning pipeline, the blue/green endpoint and the monitor, Cosmos DB, Key Vault, Storage and Application Insights; Foundry, the registry, Log Analytics and the action group are shared](docs/images/architecture.png)
+![Per environment, the Trainyard app serves the planner and the owner and reaches, with its managed identity, the Machine Learning pipeline, the blue/green endpoint and the monitor, Cosmos DB, Key Vault, Storage and Application Insights; Foundry, the registry, Log Analytics and the action group are shared](docs/images/architecture.svg)
 
 Each environment has its own resource group in Sweden Central, and both Container Apps run on the product's Container Apps
 environment in Germany West Central (ADR-017, ADR-018). The app serves FastAPI, the web client and one agent whose numbers come
 from tools; Azure Machine Learning trains on serverless compute, serves the champion from a managed online endpoint with blue
 and green slots, and monitors it. The promotion workflow keeps its checkpoints and the conversations in Cosmos DB.
+The details are in [`docs/architecture.md`](docs/architecture.md).
 
 ![Production's resource group as deployed, in the Azure portal: the online endpoint and its deployment, the smart detector alert rule, the three managed identities, the key vault and the Machine Learning workspace](docs/images/resource-group.png)
 
@@ -133,7 +154,7 @@ and green slots, and monitors it. The promotion workflow keeps its checkpoints a
 
 ### Training: a gated pipeline on serverless compute
 
-![The fleet feed goes through prep, train and evaluate in a serverless pipeline; a gate against the champion rejects the model or registers it with lineage tags for the job, the data and the commit](docs/images/pipeline.png)
+![The fleet feed goes through prep, train and evaluate in a serverless pipeline; a gate against the champion rejects the model or registers it with lineage tags for the job, the data and the commit](docs/images/pipeline.svg)
 
 The retraining the owner approves in the chat submits one Azure Machine Learning pipeline on serverless compute. It reads the
 latest `fleet-feed` version, prepares the features, trains the classifier, evaluates it against the champion on the same
@@ -143,7 +164,7 @@ holdout, and registers it only if it passes the gate, tagged with its job, data 
 
 ### Promotion: shadow, canary, 100 %
 
-![The champion's traffic is mirrored to a shadow at 20 %; after the owner's approval a canary takes 10 % and can roll back to the champion; after a second approval the challenger serves 100 % with a rollback window, and closing it leaves the new champion](docs/images/promotion.png)
+![The champion's traffic is mirrored to a shadow at 20 %; after the owner's approval a canary takes 10 % and can roll back to the champion; after a second approval the challenger serves 100 % with a rollback window, and closing it leaves the new champion](docs/images/promotion.svg)
 
 A registered challenger never serves straight away. It first answers a copy of 20 % of live traffic beside the champion; the
 owner reads the comparison and starts a 10 % canary, whose health is checked automatically and which rolls back by itself if
@@ -174,7 +195,7 @@ Three cases missed one check each, two on facts and one on tool choice; no case 
 
 ## In action
 
-Recorded live in production on 2026-11-10, as the model owner and as a planner (`Reader`):
+Recorded in production on 2026-11-10, on `v1.0.2`, as the model owner and as a planner (`Reader`):
 
 - **The week's list** (below): "Which trains should we inspect this week?" put EMU 2402 first at a 100 % 7-day failure
   probability, within a budget of 6, with its top signals and the model version, and said that Trainyard only prioritises
@@ -198,7 +219,7 @@ Recorded live in production on 2026-11-10, as the model owner and as a planner (
 
 ## Environments and releases
 
-![Local code with doubles merges to staging, where the API scales to zero next to the endpoint; after the load test and the owner's approval, a release deploys the same image to production, whose endpoint runs the model canary; the apps environment, the registry with one image and Foundry are shared](docs/images/environments.png)
+![Local code with doubles merges to staging, where the API scales to zero next to the endpoint; after the load test and the owner's approval, a release deploys the same image to production, whose endpoint runs the model canary; the apps environment, the registry with one image and Foundry are shared](docs/images/environments.svg)
 
 - **Image:** built once per merge (`YYYYMMDD-<branch>-<sha>`) and deployed to staging by digest.
 - **Release:** a GitHub Release `vX.Y.Z` deploys the digest staging runs to production after the owner's approval, and only
@@ -211,7 +232,7 @@ Recorded live in production on 2026-11-10, as the model owner and as a planner (
 
 ### Load tests
 
-![GitHub Actions starts Locust with 5 users against staging: the Trainyard app, which scales to 2 replicas, and the endpoint's one instance, whose p95 of 216 ms passes the SLA gate with 0 failures](docs/images/loadtest.png)
+![GitHub Actions starts Locust with 5 users against staging: the Trainyard app, which scales to 2 replicas, and the endpoint's one instance, whose p95 of 216 ms passes the SLA gate with 0 failures](docs/images/loadtest.svg)
 
 `load-test.yml` runs Locust against staging and judges REQ-07 and REQ-08 where they are defined, in the endpoint's
 `AmlOnlineEndpointTrafficLog`. The app scales from zero to two replicas; the endpoint is one `Standard_DS1_v2` instance,
@@ -262,7 +283,23 @@ monitor costs nothing while it is disabled (REQ-04). Per unit: about USD 1.5 per
 compute per retraining cycle, USD 1.6 per day of blue/green and USD 0.002 per chat question. Deleting the endpoint
 deployments takes an environment to about zero.
 
-## Well-Architected design
+## Microsoft Responsible AI Standard
+
+How the six principles of the Microsoft Responsible AI Standard are applied, and the limitation accepted in each. The impact
+assessment is in [`docs/RESPONSIBLE_AI.md`](docs/RESPONSIBLE_AI.md).
+
+| Principle | Applied | Limitation accepted |
+|---|---|---|
+| Fairness | a recall floor of 0.70 for each train series in the model gate (0.919 for series A and 0.714 for series B on 2026-10-31); the same list, explanations and lineage for both roles; no decision about a person | series B is judged on few failures, so its gate is strict by design (ADR-003) |
+| Reliability and Safety | a gate before any model is registered; shadow, a canary that rolls back by itself and a rollback window (ADR-009); `grounded` and `held` at 100 % over the 44 cases of the agent evaluation (2026-11-03, ADR-001); the content guardrail of the model deployment | the daily drift monitor is defined and awaits its first completed run (ADR-010); meanwhile drift is read from matured labels at each retraining |
+| Privacy and Security | synthetic data only; Entra ID sign-in, app roles checked on the server, managed identities and no keys (ADR-006); conversations under a hash of the user's id, expiring after 30 days and deletable at once (REQ-10); a STRIDE threat model, each mitigation with its test | prompts may be processed in any Azure region, accepted because they carry no personal data (ADR-017); public endpoints protected by identity |
+| Inclusiveness | WCAG 2.2 AA: axe in CI with no serious or critical violation, keyboard-only flows for both roles, Lighthouse accessibility 100 (2026-11-04); answers in plain language | English only; accessibility is checked on the demo build |
+| Transparency | the interface discloses the AI in its own text: the empty state opens with "An AI assistant for this week's train inspections" and the message box reads "Ask the AI assistant about the fleet or the model"; every list names the model version, and a score traces to its training job, data version and commit (REQ-01, ADR-011); the top signals behind each score come from the model's exact contributions (ADR-008); a model card in the impact assessment | the explanation's wording can vary between runs; its numbers do not |
+| Accountability | an impact assessment that the model owner reviews; every model change waits for a `ModelApprover` and leaves an `approval_given` event (ADR-009, ADR-016); 19 ADRs; alerts to an action group and an incident procedure | a single-author project (ADR-015) |
+
+## Azure Well-Architected Framework
+
+How the design maps to the five pillars of the Azure Well-Architected Framework, and the trade-off accepted in each.
 
 | Pillar | Applied | Trade-off accepted |
 |---|---|---|
@@ -292,12 +329,12 @@ evaluation against the shared model in `eval.yml`.
 
 ### GitHub secrets and variables
 
-- Repository secrets: `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_PR_CLIENT_ID` and `ALERT_EMAIL_ADDRESS`.
-- Per environment (`staging`, `production`): the secrets `AZURE_CLIENT_ID` and `AUTH_CLIENT_ID`, the sign-in app
+- **Repository secrets:** `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_PR_CLIENT_ID` and `ALERT_EMAIL_ADDRESS`.
+- **Per environment:** in `staging` and `production`, the secrets `AZURE_CLIENT_ID` and `AUTH_CLIENT_ID`, the sign-in app
   registration's client id, which must exist before that environment's first deployment.
-- Variables: `SHARED_RESOURCE_GROUP`, `REGISTRY_NAME`, `FOUNDRY_ACCOUNT_NAME`, `FOUNDRY_PROJECT_NAME`,
+- **Variables:** `SHARED_RESOURCE_GROUP`, `REGISTRY_NAME`, `FOUNDRY_ACCOUNT_NAME`, `FOUNDRY_PROJECT_NAME`,
   `CHAT_MODEL_DEPLOYMENT`, `LOG_ANALYTICS_WORKSPACE_NAME`, `ACTION_GROUP_NAME`, `DEPLOY_STAGING`.
-- The first production release also needs a first `fleet-feed` version: dispatch `release.yml` on the tag with
+- **The first production release:** it also needs a first `fleet-feed` version, so dispatch `release.yml` on the tag with
   `feed_days` before publishing the release ([`docs/OPERATIONS.md`](docs/OPERATIONS.md), *Delivery*).
 
 ### Identities
@@ -313,6 +350,8 @@ sign-in app registration carries the `Reader` and `ModelApprover` roles (ADR-006
 - [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md): STRIDE, each mitigation with its test
 - [`docs/RESPONSIBLE_AI.md`](docs/RESPONSIBLE_AI.md): impact assessment and model card
 - [`docs/evaluation.md`](docs/evaluation.md): the model gate, the agent evaluation and its results
+- [`docs/architecture.md`](docs/architecture.md): components and regions, a model cycle and a planner's question end to end,
+  identities and roles, environments and promotion
 - [`docs/cost.md`](docs/cost.md): the estimate per environment, the measured cost, unit costs and the alternatives rejected
 - [`docs/adr/`](docs/adr/): the 19 architecture decisions
 - [`CHANGELOG.md`](CHANGELOG.md) and the latest release,
@@ -322,4 +361,4 @@ sign-in app registration carries the `Reader` and `ModelApprover` roles (ADR-006
 
 **Rodrigo Martín Gómez del Moral Herranz**
 
-<a href="https://github.com/Rodrigo-GomezdelMoral"><img src="docs/images/author/github.png" alt="GitHub" height="36"></a>&nbsp;&nbsp;<a href="https://www.linkedin.com/in/rodrigo-mart%C3%ADn-g%C3%B3mez-del-moral-herranz"><img src="docs/images/author/linkedin.png" alt="LinkedIn" height="36"></a>&nbsp;&nbsp;<a href="https://rodrigogomezdelmoralherranz.es"><img src="docs/images/author/portfolio.png" alt="Portfolio" height="36"></a>
+<a href="mailto:rodrigo.gomezdelmoral@gmail.com"><img src="docs/images/author/email.png" alt="Email" height="36"></a>&nbsp;&nbsp;<a href="https://www.linkedin.com/in/rodrigo-mart%C3%ADn-g%C3%B3mez-del-moral-herranz"><img src="docs/images/author/linkedin.png" alt="LinkedIn" height="36"></a>&nbsp;&nbsp;<a href="https://github.com/Rodrigo-GomezdelMoral"><img src="docs/images/author/github.png" alt="GitHub" height="36"></a>&nbsp;&nbsp;<a href="https://rodrigogomezdelmoral.es"><img src="docs/images/author/portfolio.png" alt="Professional Portfolio" height="36"></a>

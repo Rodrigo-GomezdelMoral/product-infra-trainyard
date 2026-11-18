@@ -20,7 +20,7 @@ ADR-017 put one environment per Trainyard environment in `germanywestcentral`: `
 
 ## Decision
 
-Option 4, the owner's decision, the same for every product in the subscription.
+Option 4, the owner's decision, the same for every workload in the subscription.
 
 - `infra/modules/environment.bicep` declares `cae-trainyard-env`: `Consumption` workload profile, logs to Azure Monitor, no zone redundancy, and a diagnostic setting to the shared Log Analytics workspace, as the per-environment ones had.
 - Only the production deployment declares it, in the existing `rg-trainyard-prod-swc`, in `germanywestcentral` (`appLocation`), tagged `environment: shared`. No resource group is created.
@@ -34,7 +34,7 @@ Option 4, the owner's decision, the same for every product in the subscription.
 ## Consequences
 
 - **What is ceded.** Staging and production share the environment's configuration: its log destination, its networking (one default domain and one internal network, without a virtual network in either case) and the platform's upgrades and availability. A change to the environment is not rehearsed in staging first; the release's `what-if` shows it.
-- **What stays separate.** The apps, their user-assigned identities, Cosmos DB accounts, workspaces, endpoints, sign-in app registrations, Easy Auth configuration, scale rules, maximum replicas and revisions, as in ADR-017, and the blast radius between products (SE:04).
+- **What stays separate.** The apps, their user-assigned identities, Cosmos DB accounts, workspaces, endpoints, sign-in app registrations, Easy Auth configuration, scale rules, maximum replicas and revisions, as in ADR-017, and the blast radius between workloads (SE:04).
 - **Staging is down during the change,** from the deletion of `ca-trainyard-stg` until `deploy.yml` recreates it after the merge. Cosmos DB, the workspace and the endpoint are untouched, so conversations, checkpoints, models and traffic survive.
 - **Host names change.** The new environment has a new default domain, so `03-login.sh <env>` runs again after the first deployment of each app into it, to register the new sign-in callback.
 - **Removal.** Deleting `rg-trainyard-prod-swc`'s resources deletes the environment and stops staging too. Removing staging deletes only `ca-trainyard-stg`.

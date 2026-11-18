@@ -4,7 +4,7 @@
 
 ## Context
 
-Phase 5 puts the agent, the promotion cards and the product's own blocks behind one FastAPI app (`app/main.py`): sign-in and roles, KPI events, feedback (REQ-09), deletion (REQ-10), timeouts, retries and a clear answer when a dependency is down or throttled. Three choices were not settled by the build prompt or departed from it.
+Phase 5 puts the agent, the promotion cards and the product's own blocks behind one FastAPI app (`app/main.py`): sign-in and roles, KPI events, feedback (REQ-09), deletion (REQ-10), timeouts, retries and a clear answer when a dependency is down or throttled. Three choices were not settled by the specification or departed from it.
 
 ## Decisions
 
@@ -21,7 +21,7 @@ Validating a token in the app was rejected: Easy Auth already does it in front o
 
 ### One Cosmos DB document per conversation, not `CosmosHistoryProvider`
 
-The build prompt named `CosmosHistoryProvider` for the conversations. Phase 5 measured why it cannot carry an approval across requests:
+The specification named `CosmosHistoryProvider` for the conversations. Phase 5 measured why it cannot carry an approval across requests:
 - **The approval needs the session.** Agent Framework 1.23 binds an approval response to the approval request it recorded in the session's state (`tool_approval`). Without that state, it drops the response with a warning.
 - **The provider stores only messages.** Every request builds a new `AgentSession`, so the state would have to live in a second document anyway.
 
@@ -36,7 +36,7 @@ The limit is the 2 MB document. A long conversation of 50 turns with tool result
 
 ### KPI events are Application Insights custom events from the logging API
 
-This settles the build prompt's **NOT VERIFIED** custom-events API.
+This settles the custom-events API, which the specification left unchecked.
 - **Learn** ("Add and modify OpenTelemetry", updated 2026-09-11): a log record with the attribute `microsoft.custom_event.name` becomes a `customEvents` row with that name. The page now shows the Microsoft OpenTelemetry Distro, but the attribute is the same.
 - **The installed package:** `azure-monitor-opentelemetry` 1.8.11 and its exporter 1.0.0b58 read the same attribute (`_MICROSOFT_CUSTOM_EVENT_NAME`).
 
