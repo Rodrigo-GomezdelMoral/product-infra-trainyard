@@ -10,7 +10,7 @@ every traffic change approved. A model cycle that cost the customer's ML team 22
 minutes of human time: in production, training ran in a median of 7.1 minutes (5 runs) and the endpoint answered 3,043
 requests in 30 days with none failed and a p95 of 117 ms (2026-11-10).
 
-<p align="center"><a href="https://rodrigogomezdelmoral.es/en/projects/product-infra-trainyard#video"><img src="docs/images/author/demo-video.png" alt="Watch the demo video" height="48"></a></p>
+<p align="center"><a href="https://rodrigogomezdelmoral.es/en/projects/product-infra-trainyard#video"><img src="docs/images/author/demo-video.png" alt="Watch the AI solution video" height="48"></a></p>
 
 **Built to standard.** This AI solution is designed, built, validated and operated in alignment with the **Microsoft
 Responsible AI Standard** (Fairness, Reliability and Safety, Privacy and Security, Inclusiveness, Transparency,
